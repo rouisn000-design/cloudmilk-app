@@ -4,7 +4,6 @@ from datetime import datetime, date
 import plotly.express as px
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-import json
 
 # --- 頁面與基礎設定 ---
 st.set_page_config(page_title="產線管理 APP 原型", layout="wide")
@@ -13,22 +12,23 @@ st.title("雲乳食品科技股份有限公司 - 產線效能與排程 APP (連�
 # --- Google 試算表串接設定 ---
 @st.cache_resource
 def init_connection():
-    # 從 Streamlit Secrets 讀取金鑰
-    creds_dict = st.secrets["gcp_service_account"]
-    scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-    client = gspread.authorize(creds)
-    # 🌟 請將下方引號內的名稱，改成您 Google 試算表的名稱！
-    sheet = client.open("產線生產紀錄_DB").sheet1
-    return sheet
+    try:
+        creds_dict = st.secrets["gcp_service_account"]
+        scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+        client = gspread.authorize(creds)
+        # 🌟 請確認下方引號內的名稱，與您 Google 試算表的名稱完全一致！
+        sheet = client.open("產線生產紀錄_DB").sheet1
+        return sheet
+    except Exception as e:
+        return None
 
 # 初始化連線
-try:
-    sheet = init_connection()
-    db_connected = True
-except Exception as e:
-    st.error(f"資料庫連線失敗，請檢查金鑰設定。錯誤訊息: {e}")
-    db_connected = False
+sheet = init_connection()
+db_connected = True if sheet else False
+
+if not db_connected:
+    st.error("資料庫連線失敗，請檢查金鑰或試算表名稱設定。")
 
 # 讀取雲端資料的函數
 def fetch_data():
@@ -38,10 +38,11 @@ def fetch_data():
             if records:
                 return pd.DataFrame(records)
             else:
-                # 若試算表為空，回傳空表頭
+                # 若試算表為空，回傳包含新擴充欄位的空表頭
                 return pd.DataFrame(columns=[
                     '日期', '產線', '作業類型', '產品名稱', 
-                    '開始時間', '結束時間', '實際花費時間(H)', '生產數量(瓶)', '生產噸數(T)'
+                    '開始時間', '結束時間', '實際花費時間(H)', '實際生產數量(瓶)', '調配生產噸數(T)',
+                    '設備標準產能(瓶/H)', '設備稼動效率(%)', '產品產出率(%)'
                 ])
         except Exception as e:
              st.warning(f"讀取資料異常: {e}")
@@ -70,30 +71,49 @@ st.sidebar.subheader("時間與產量設定")
 start_time = st.sidebar.time_input("開始時間 (首件/作業開始)")
 end_time = st.sidebar.time_input("結束時間 (末件/作業結束)")
 
+# 依據作業類型，決定是否顯示效能參數輸入框
 if task_type == "產品生產":
     bottle_count = st.sidebar.number_input("實際生產數量 (瓶)", min_value=0, value=5000, step=100)
-    bottle_weight = st.sidebar.number_input("單瓶重量/容量參數 (g/ml)", min_value=0, value=946, step=1)
+    bottle_weight = st.sidebar.number_input("單瓶容量/重量 (ml/g)", min_value=0, value=946, step=1)
+    
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("🎯 效能分析參數")
+    standard_rate = st.sidebar.number_input("設備標準產能 (瓶/H)", min_value=1, value=6000, step=100)
+    batch_tons = st.sidebar.number_input("調配(生產)噸數 (T)", min_value=0.0, value=5.0, step=0.1)
 else:
     bottle_count = 0
     bottle_weight = 0
+    standard_rate = 0
+    batch_tons = 0
 
-# --- 資料寫入邏輯 ---
+# --- 資料寫入與系統自動計算邏輯 ---
 if st.sidebar.button("確認送出紀錄"):
     if end_time <= start_time:
         st.sidebar.error("錯誤：結束時間不得早於或等於開始時間！")
     elif not db_connected:
         st.sidebar.error("資料庫未連線，無法寫入。")
     else:
+        # 計算實際花費時間
         t1 = datetime.combine(today, start_time)
         t2 = datetime.combine(today, end_time)
         actual_hours = (t2 - t1).total_seconds() / 3600
         
-        if task_type == "產品生產":
-            production_tons = (bottle_count * bottle_weight) / 1000000
-        else:
-            production_tons = 0
+        performance_rate = 0.0
+        yield_rate = 0.0
         
-        # 準備寫入 Google 試算表的一列資料 (格式須與試算表欄位順序完全一致)
+        # 只有在「產品生產」時才計算效能與產出率
+        if task_type == "產品生產":
+            # 1. 計算設備稼動效率： 實際數量 / (標準時產能 * 實際小時)
+            if actual_hours > 0 and standard_rate > 0:
+                theoretical_output = standard_rate * actual_hours
+                performance_rate = (bottle_count / theoretical_output) * 100
+                
+            # 2. 計算產品產出率： (實際裝瓶總量) / 調配生產噸數
+            if batch_tons > 0:
+                actual_tons_filled = (bottle_count * bottle_weight) / 1000000
+                yield_rate = (actual_tons_filled / batch_tons) * 100
+        
+        # 準備寫入 Google 試算表的一列資料
         new_row = [
             today.strftime("%Y-%m-%d"), 
             selected_line, 
@@ -103,14 +123,17 @@ if st.sidebar.button("確認送出紀錄"):
             end_time.strftime("%H:%M"),
             round(actual_hours, 2), 
             bottle_count, 
-            round(production_tons, 2)
+            round(batch_tons, 2) if task_type == "產品生產" else "-",
+            standard_rate if task_type == "產品生產" else "-",
+            f"{round(performance_rate, 1)}%" if task_type == "產品生產" else "-",
+            f"{round(yield_rate, 1)}%" if task_type == "產品生產" else "-"
         ]
         
         # 執行寫入
         try:
             sheet.append_row(new_row)
             st.sidebar.success(f"成功寫入雲端資料庫！")
-            st.rerun() # 寫入成功後自動重整畫面以讀取最新資料
+            st.rerun() 
         except Exception as e:
             st.sidebar.error(f"寫入失敗: {e}")
 
@@ -133,11 +156,11 @@ if not df.empty and len(df) > 0:
         fig.update_yaxes(autorange="reversed") 
         st.plotly_chart(fig, use_container_width=True)
     except Exception as e:
-        st.warning(f"圖表繪製發生錯誤，請確認試算表資料格式是否正確。({e})")
+        st.warning(f"圖表繪製異常，請稍候再試。({e})")
 else:
     st.info("雲端資料庫目前尚無紀錄，請從左方輸入資料。")
 
 st.markdown("---")
-st.subheader("二、 產線生產與保養紀錄表 (Google Sheets 即時數據)")
+st.subheader("二、 產線效能與保養紀錄表 (Google Sheets 即時數據)")
 if not df.empty and len(df) > 0:
     st.dataframe(df, use_container_width=True)
