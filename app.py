@@ -41,7 +41,8 @@ def fetch_data():
                 # 若試算表為空，回傳包含新擴充欄位的空表頭
                 return pd.DataFrame(columns=[
                     '日期', '產線', '作業類型', '產品名稱', 
-                    '開始時間', '結束時間', '實際花費時間(H)', '實際生產數量(瓶)', '調配生產噸數(T)',
+                    '開始時間', '結束時間', '實際花費時間(H)', '實際生產數量(瓶)', 
+                    '單瓶容量(ml/g)', '調配生產噸數(T)',
                     '設備標準產能(瓶/H)', '設備稼動效率(%)', '產品產出率(%)'
                 ])
         except Exception as e:
@@ -113,7 +114,7 @@ if st.sidebar.button("確認送出紀錄"):
                 actual_tons_filled = (bottle_count * bottle_weight) / 1000000
                 yield_rate = (actual_tons_filled / batch_tons) * 100
         
-        # 準備寫入 Google 試算表的一列資料
+        # 準備寫入 Google 試算表的一列資料 (已新增單瓶容量)
         new_row = [
             today.strftime("%Y-%m-%d"), 
             selected_line, 
@@ -123,6 +124,7 @@ if st.sidebar.button("確認送出紀錄"):
             end_time.strftime("%H:%M"),
             round(actual_hours, 2), 
             bottle_count, 
+            bottle_weight if task_type == "產品生產" else "-",  # 新增：寫入單瓶容量
             round(batch_tons, 2) if task_type == "產品生產" else "-",
             standard_rate if task_type == "產品生產" else "-",
             f"{round(performance_rate, 1)}%" if task_type == "產品生產" else "-",
