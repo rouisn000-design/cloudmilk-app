@@ -143,10 +143,20 @@ if st.sidebar.button("確認送出紀錄"):
 # --- 主畫面：讀取雲端資料並渲染 ---
 df = fetch_data()
 
-st.subheader("一、 產線即時排程可視化 (雲端同步)")
-if not df.empty and len(df) > 0:
+# 🌟 核心優化：依照左側欄選擇的「紀錄日期」來過濾資料
+selected_date_str = today.strftime("%Y-%m-%d")
+
+if not df.empty:
+    # 只保留資料庫中「日期」符合所選日期的資料
+    df_display = df[df['日期'] == selected_date_str]
+else:
+    df_display = pd.DataFrame()
+
+st.subheader(f"一、 產線即時排程可視化 ({selected_date_str})")
+
+if not df_display.empty and len(df_display) > 0:
     try:
-        df_chart = df.copy()
+        df_chart = df_display.copy()
         # 建立標準時間格式
         df_chart['Start'] = pd.to_datetime(df_chart['日期'].astype(str) + ' ' + df_chart['開始時間'].astype(str))
         df_chart['Finish'] = pd.to_datetime(df_chart['日期'].astype(str) + ' ' + df_chart['結束時間'].astype(str))
@@ -169,8 +179,8 @@ if not df.empty and len(df) > 0:
             x_end="Finish", 
             y="產線", 
             color="顯示標籤",
-            text="顯示標籤",  # 🌟 讓文字直接顯示在色塊上
-            hover_name="顯示標籤", # 🌟 懸浮視窗大標題
+            text="顯示標籤", 
+            hover_name="顯示標籤",
             hover_data={
                 "顯示標籤": False, 
                 "Start": True,
@@ -179,8 +189,8 @@ if not df.empty and len(df) > 0:
                 "產量": True,
                 "產線": False
             },
-            title="當日生產與設備保養排程", 
-            height=400 # 🌟 加高圖表讓視覺更舒適
+            title=f"{selected_date_str} 當日生產與設備保養排程", 
+            height=400 
         )
         
         # 反轉 Y 軸讓產線由上往下排列
@@ -189,8 +199,8 @@ if not df.empty and len(df) > 0:
         # 優化 X 軸時間顯示方式
         fig.update_xaxes(
             title_text="",
-            tickformat="%H:%M",  # 🌟 鎖定時間顯示為 HH:MM
-            dtick=3600000,       # 🌟 設定每 1 小時 (3600000毫秒) 一個刻度
+            tickformat="%H:%M",  
+            dtick=3600000,       
             tickangle=45
         )
         
@@ -201,9 +211,9 @@ if not df.empty and len(df) > 0:
         fig.update_layout(
             legend_title_text="作業項目",
             legend=dict(
-                orientation="h", # 🌟 圖例改為水平顯示
+                orientation="h", 
                 yanchor="top",
-                y=-0.2,          # 🌟 移至圖表下方
+                y=-0.2,          
                 xanchor="center",
                 x=0.5
             ),
@@ -214,9 +224,9 @@ if not df.empty and len(df) > 0:
     except Exception as e:
         st.warning(f"圖表繪製異常，請稍候再試。({e})")
 else:
-    st.info("雲端資料庫目前尚無紀錄，請從左方輸入資料。")
+    st.info(f"雲端資料庫中目前尚無 {selected_date_str} 的紀錄。")
 
 st.markdown("---")
-st.subheader("二、 產線效能與保養紀錄表 (Google Sheets 即時數據)")
-if not df.empty and len(df) > 0:
-    st.dataframe(df, use_container_width=True)
+st.subheader(f"二、 {selected_date_str} 產線效能與保養紀錄表")
+if not df_display.empty and len(df_display) > 0:
+    st.dataframe(df_display, use_container_width=True)
