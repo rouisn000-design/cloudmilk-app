@@ -164,6 +164,6 @@ else:
     st.info("雲端資料庫目前尚無紀錄，請從左方輸入資料。")
 
 st.markdown("---")
-st.subheader("二、 產線效能與保養紀錄表 (Google Sheets 即時數據)")
+st.subheader("二、 產線效能紀錄表 (Google Sheets 即時數據)")
 if not df.empty and len(df) > 0:
     st.dataframe(df, use_container_width=True)
