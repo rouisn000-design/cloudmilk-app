@@ -49,9 +49,9 @@ def fetch_data():
              st.warning(f"讀取資料異常: {e}")
     return pd.DataFrame()
 
-# 產線與產品連動字典
+# 產線與產品連動字典 (已新增 PP 產線與對應品項)
 product_mapping = {
-    "TR/G7": ["元初-高蛋白濃豆乳", "有飲-開心果四季春奶茶", "全家-抹茶牛乳", "全家-紅茶牛乳", "雲乳-純濃牛乳", "台牧-茶の魔手專用", "台牧-六甲田莊鮮乳", "台牧-六甲田莊極選A2β鮮乳", "台牧-六甲雙韻茶牛乳", "台牧-六甲純培咖啡牛乳", "翔本-特濃厚牛乳", "茗登-提茉西特濃牛乳", "AGV-鮮採梅番茄900", "AGV-梅子番茄400", "匯紘-阿薩姆奶茶", "匯紘-阿薩姆青森蘋果奶茶", "匯紘-阿薩姆雙茶會烏龍奶茶" ],
+   "TR/G7": ["元初-高蛋白濃豆乳", "有飲-開心果四季春奶茶", "全家-抹茶牛乳", "全家-紅茶牛乳", "雲乳-純濃牛乳", "台牧-茶の魔手專用", "台牧-六甲田莊鮮乳", "台牧-六甲田莊極選A2β鮮乳", "台牧-六甲雙韻茶牛乳", "台牧-六甲純培咖啡牛乳", "翔本-特濃厚牛乳", "茗登-提茉西特濃牛乳", "AGV-鮮採梅番茄900", "AGV-梅子番茄400", "匯紘-阿薩姆奶茶", "匯紘-阿薩姆青森蘋果奶茶", "匯紘-阿薩姆雙茶會烏龍奶茶" ],
     "TR/7":  ["元初-高蛋白濃豆乳", "有飲-開心果四季春奶茶", "全家-抹茶牛乳", "全家-紅茶牛乳", "翔本-特濃厚牛乳", "AGV-鮮採梅番茄900", "AGV-梅子番茄400", "匯紘-阿薩姆奶茶", "匯紘-阿薩姆青森蘋果奶茶", "匯紘-阿薩姆雙茶會烏龍奶茶" ],
     "PE": ["全脂牛乳 1837", "全脂牛乳 946", "牛奶本味", "抹茶本位", "奶茶本位", "果汁牛乳", "台牧-六甲田莊巧克力牛乳乳飲品", "台牧-六甲田莊咖啡牛乳乳飲品" ], 
     "PP": ["AGV-寒天檸檬", "AGV-寒天百香", "AGV-寒天仙草", "AGV-番茄蜂蜜綜合蔬菜汁","英泉-巧克力", "英泉-麥芽", "英泉-蘋果", "英泉-草莓", "英泉-優酪乳乳酸飲料", "英泉-蔓越莓乳酸飲料","台牧-六甲田莊鮮乳", "台牧-六甲田莊牛乳", "台牧-極選牛乳", "台牧-珍稀牛乳" ], 
@@ -115,7 +115,7 @@ if st.sidebar.button("確認送出紀錄"):
                 actual_tons_filled = (bottle_count * bottle_weight) / 1000000
                 yield_rate = (actual_tons_filled / batch_tons) * 100
         
-        # 準備寫入 Google 試算表的一列資料 (已新增單瓶容量)
+        # 準備寫入 Google 試算表的一列資料
         new_row = [
             today.strftime("%Y-%m-%d"), 
             selected_line, 
@@ -125,7 +125,7 @@ if st.sidebar.button("確認送出紀錄"):
             end_time.strftime("%H:%M"),
             round(actual_hours, 2), 
             bottle_count, 
-            bottle_weight if task_type == "產品生產" else "-",  # 新增：寫入單瓶容量
+            bottle_weight if task_type == "產品生產" else "-",
             round(batch_tons, 2) if task_type == "產品生產" else "-",
             standard_rate if task_type == "產品生產" else "-",
             f"{round(performance_rate, 1)}%" if task_type == "產品生產" else "-",
@@ -147,16 +147,69 @@ st.subheader("一、 產線即時排程可視化 (雲端同步)")
 if not df.empty and len(df) > 0:
     try:
         df_chart = df.copy()
+        # 建立標準時間格式
         df_chart['Start'] = pd.to_datetime(df_chart['日期'].astype(str) + ' ' + df_chart['開始時間'].astype(str))
         df_chart['Finish'] = pd.to_datetime(df_chart['日期'].astype(str) + ' ' + df_chart['結束時間'].astype(str))
         
+        # 判斷要顯示在甘特圖上的文字
         df_chart['顯示標籤'] = df_chart.apply(
             lambda x: x['產品名稱'] if x['作業類型'] == '產品生產' else x['作業類型'], axis=1
         )
         
-        fig = px.timeline(df_chart, x_start="Start", x_end="Finish", y="產線", color="顯示標籤",
-                          title="當日生產與保養排程", height=300)
-        fig.update_yaxes(autorange="reversed") 
+        # 準備要放進懸浮視窗的詳細資訊
+        df_chart['花費時間'] = df_chart['實際花費時間(H)'].astype(str) + " 小時"
+        df_chart['產量'] = df_chart.apply(
+            lambda x: f"{x['實際生產數量(瓶)']} 瓶" if x['作業類型'] == '產品生產' else "無", axis=1
+        )
+        
+        # 繪製進階版甘特圖
+        fig = px.timeline(
+            df_chart, 
+            x_start="Start", 
+            x_end="Finish", 
+            y="產線", 
+            color="顯示標籤",
+            text="顯示標籤",  # 🌟 讓文字直接顯示在色塊上
+            hover_name="顯示標籤", # 🌟 懸浮視窗大標題
+            hover_data={
+                "顯示標籤": False, 
+                "Start": True,
+                "Finish": True,
+                "花費時間": True,
+                "產量": True,
+                "產線": False
+            },
+            title="當日生產與設備保養排程", 
+            height=400 # 🌟 加高圖表讓視覺更舒適
+        )
+        
+        # 反轉 Y 軸讓產線由上往下排列
+        fig.update_yaxes(autorange="reversed", title_text="") 
+        
+        # 優化 X 軸時間顯示方式
+        fig.update_xaxes(
+            title_text="",
+            tickformat="%H:%M",  # 🌟 鎖定時間顯示為 HH:MM
+            dtick=3600000,       # 🌟 設定每 1 小時 (3600000毫秒) 一個刻度
+            tickangle=45
+        )
+        
+        # 文字置中對齊，自動縮放
+        fig.update_traces(textposition='inside', insidetextanchor='middle')
+        
+        # 圖例與邊界優化
+        fig.update_layout(
+            legend_title_text="作業項目",
+            legend=dict(
+                orientation="h", # 🌟 圖例改為水平顯示
+                yanchor="top",
+                y=-0.2,          # 🌟 移至圖表下方
+                xanchor="center",
+                x=0.5
+            ),
+            margin=dict(t=50, b=80, l=50, r=50)
+        )
+        
         st.plotly_chart(fig, use_container_width=True)
     except Exception as e:
         st.warning(f"圖表繪製異常，請稍候再試。({e})")
@@ -164,6 +217,6 @@ else:
     st.info("雲端資料庫目前尚無紀錄，請從左方輸入資料。")
 
 st.markdown("---")
-st.subheader("二、 產線效能紀錄表 (Google Sheets 即時數據)")
+st.subheader("二、 產線效能與保養紀錄表 (Google Sheets 即時數據)")
 if not df.empty and len(df) > 0:
     st.dataframe(df, use_container_width=True)
