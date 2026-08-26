@@ -37,7 +37,6 @@ def fetch_data():
             if records:
                 return pd.DataFrame(records)
             else:
-                # 🌟 更新：新增「殺菌後成品量(L)」欄位
                 return pd.DataFrame(columns=[
                     '日期', '設備類別', '設備名稱', '作業類型', '產品名稱', 
                     '開始時間', '結束時間', '實際花費時間(H)', '實際生產數量(瓶)', 
@@ -156,19 +155,16 @@ if st.sidebar.button("確認送出紀錄"):
         t1 = datetime.combine(today, start_time)
         t2 = datetime.combine(today, end_time)
         
-        # 精確計算總秒數與小時
         total_seconds = (t2 - t1).total_seconds()
         actual_hours = total_seconds / 3600.0
         
         sterilized_volume = 0.0
         
-        # 1. 殺菌機產量計算邏輯：總秒數 * 每秒能力
         if equip_type == "殺菌機" and task_type == "產品殺菌作業":
             if total_seconds > 0 and standard_rate > 0:
                 capacity_per_second = standard_rate / 3600.0
                 sterilized_volume = total_seconds * capacity_per_second
 
-        # 2. 生產線效能計算邏輯
         if equip_type == "生產線" and task_type == "產品生產":
             if actual_hours > 0 and standard_rate > 0:
                 theoretical_output = standard_rate * actual_hours
@@ -180,7 +176,6 @@ if st.sidebar.button("確認送出紀錄"):
         
         time_format = "%H:%M:%S" if equip_type == "殺菌機" else "%H:%M"
 
-        # 🌟 寫入新列資料，並對應 Google Sheet 新增的第 15 欄
         new_row = [
             today.strftime("%Y-%m-%d"), 
             equip_type,
@@ -196,7 +191,7 @@ if st.sidebar.button("確認送出紀錄"):
             standard_rate, 
             f"{round(performance_rate, 1)}%" if equip_type == "生產線" and task_type == "產品生產" else "-",
             f"{round(yield_rate, 1)}%" if equip_type == "生產線" and task_type == "產品生產" else "-",
-            round(sterilized_volume, 2) if equip_type == "殺菌機" and task_type == "產品殺菌作業" else "-", # 新增欄位寫入
+            round(sterilized_volume, 2) if equip_type == "殺菌機" and task_type == "產品殺菌作業" else "-", 
             remarks  
         ]
         
@@ -220,7 +215,7 @@ else:
 st.subheader(f"一、 產線與殺菌即時排程可視化 ({selected_date_str})")
 
 if not df_display.empty and len(df_display) > 0:
-try:
+    try:
         df_chart = df_display.copy()
         
         if '設備名稱' not in df_chart.columns and '產線' in df_chart.columns:
@@ -239,10 +234,12 @@ try:
                 hours = int(h_float)
                 minutes = int((h_float - hours) * 60)
                 seconds = int(round((((h_float - hours) * 60) - minutes) * 60))
+                
                 parts = []
                 if hours > 0: parts.append(f"{hours} 小時")
                 if minutes > 0: parts.append(f"{minutes} 分")
                 if seconds > 0: parts.append(f"{seconds} 秒")
+                
                 return " ".join(parts) if parts else "0 秒"
             except:
                 return str(h)
@@ -266,10 +263,8 @@ try:
         def split_overlapping_blocks(df):
             if df.empty: return df
             
-            # 定義哪些作業類型會「切斷」生產時間
             interrupt_types = ['機台維修', '待料停機', '中午用餐', '設備蒸汽殺菌', '設備CIP清洗']
             
-            # 將資料分為「底層主區塊」與「覆蓋層中斷區塊」
             base_blocks = df[~df['作業類型'].isin(interrupt_types)].to_dict('records')
             interrupt_blocks = df[df['作業類型'].isin(interrupt_types)].to_dict('records')
             
@@ -280,39 +275,32 @@ try:
                 start = base['Start']
                 end = base['Finish']
                 
-                # 找出同設備、且時間有交疊的中斷事件
                 overlaps = [i for i in interrupt_blocks if i['設備名稱'] == line and i['Start'] < end and i['Finish'] > start]
-                overlaps.sort(key=lambda x: x['Start']) # 依時間先後排序
+                overlaps.sort(key=lambda x: x['Start'])
                 
                 current_start = start
                 for overlap in overlaps:
                     overlap_start = max(current_start, overlap['Start'])
                     overlap_end = min(end, overlap['Finish'])
                     
-                    # 如果中斷事件開始前還有一段時間，則建立「切斷前」的區塊
                     if current_start < overlap_start:
                         segment = base.copy()
                         segment['Start'] = current_start
                         segment['Finish'] = overlap_start
                         new_records.append(segment)
                     
-                    # 將起點移到中斷事件結束之後
                     current_start = max(current_start, overlap_end)
                 
-                # 若所有中斷事件結束後，主區塊還有剩餘時間，則建立「切斷後」的區塊
                 if current_start < end:
                     segment = base.copy()
                     segment['Start'] = current_start
                     segment['Finish'] = end
                     new_records.append(segment)
                     
-            # 將切割後的主區塊與原本的中斷區塊合併回來
             return pd.DataFrame(new_records + interrupt_blocks)
 
-        # 套用分割函數
         df_chart_split = split_overlapping_blocks(df_chart)
 
-        # 繪製甘特圖 (使用切割後的資料 df_chart_split)
         fig = px.timeline(
             df_chart_split, 
             x_start="Start", 
