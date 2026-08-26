@@ -229,34 +229,42 @@ if not df_display.empty and len(df_display) > 0:
         
         st.plotly_chart(fig, use_container_width=True)
         
-        # 🌟 --- 系統自動化分析報告與各線稼動率看板 ---
+# 🌟 --- 系統自動化分析報告與各線稼動率看板 ---
         st.markdown(f"### 📊 {selected_date_str} 產線整體效能與分析報告")
         
-        prod_df = df_display[df_display['作業類型'] == '產品生產'].copy()
-        
-        if not prod_df.empty:
-            # 將欄位轉換為數值以便計算
-            prod_df['實際生產數量(瓶)'] = pd.to_numeric(prod_df['實際生產數量(瓶)'], errors='coerce').fillna(0)
-            prod_df['實際花費時間(H)'] = pd.to_numeric(prod_df['實際花費時間(H)'], errors='coerce').fillna(0)
-            prod_df['設備標準產能(瓶/H)'] = pd.to_numeric(prod_df['設備標準產能(瓶/H)'], errors='coerce').fillna(0)
+        if not df_display.empty:
+            # 確保欄位皆轉換為數值以便計算
+            df_display['實際生產數量(瓶)'] = pd.to_numeric(df_display['實際生產數量(瓶)'], errors='coerce').fillna(0)
+            df_display['實際花費時間(H)'] = pd.to_numeric(df_display['實際花費時間(H)'], errors='coerce').fillna(0)
+            df_display['設備標準產能(瓶/H)'] = pd.to_numeric(df_display['設備標準產能(瓶/H)'], errors='coerce').fillna(0)
             
-            # 計算當日各批次的理論最大產量 (標準產能 × 實際小時)
-            prod_df['理論最大產量'] = prod_df['設備標準產能(瓶/H)'] * prod_df['實際花費時間(H)']
-            
-            # 建立多個並排的數據看板 (依據產線數量自動切割欄位)
             cols = st.columns(len(product_mapping.keys()))
             perf_dict = {}
             
             for idx, line in enumerate(product_mapping.keys()):
-                line_data = prod_df[prod_df['產線'] == line]
+                line_data = df_display[df_display['產線'] == line]
                 with cols[idx]:
-                    if not line_data.empty and line_data['理論最大產量'].sum() > 0:
-                        total_actual = line_data['實際生產數量(瓶)'].sum()
-                        total_theory = line_data['理論最大產量'].sum()
-                        # 計算該產線整日的平均稼動率
-                        line_perf = (total_actual / total_theory) * 100
-                        perf_dict[line] = line_perf
-                        st.metric(label=f"🟢 {line} 產線總稼動率", value=f"{line_perf:.1f}%")
+                    prod_data = line_data[line_data['作業類型'] == '產品生產']
+                    
+                    if not prod_data.empty and prod_data['實際花費時間(H)'].sum() > 0:
+                        # 1. 取得該線「所有作業」的總時數 (包含殺菌、生產、CIP、維修等)
+                        total_line_hours = line_data['實際花費時間(H)'].sum()
+                        
+                        # 2. 依據各產品生產時間，計算「加權平均標準產能」
+                        total_prod_hours = prod_data['實際花費時間(H)'].sum()
+                        theoretical_total_prod = (prod_data['設備標準產能(瓶/H)'] * prod_data['實際花費時間(H)']).sum()
+                        weighted_avg_capacity = theoretical_total_prod / total_prod_hours
+                        
+                        # 3. 取得實際總產量
+                        total_actual_bottles = prod_data['實際生產數量(瓶)'].sum()
+                        
+                        # 4. 嚴格版總稼動率計算 (總產量 ÷ [總時間 × 加權平均產能])
+                        if total_line_hours > 0 and weighted_avg_capacity > 0:
+                            line_perf = (total_actual_bottles / (total_line_hours * weighted_avg_capacity)) * 100
+                            perf_dict[line] = line_perf
+                            st.metric(label=f"🟢 {line} 產線總稼動率", value=f"{line_perf:.1f}%")
+                        else:
+                            st.metric(label=f"⚪ {line} 產線總稼動率", value="無法計算")
                     else:
                         st.metric(label=f"⚪ {line} 產線總稼動率", value="無生產紀錄")
             
@@ -264,18 +272,15 @@ if not df_display.empty and len(df_display) > 0:
             st.markdown("**💡 系統自動分析摘要：**")
             
             if perf_dict:
-                # 找出表現最佳的產線
                 best_line = max(perf_dict, key=perf_dict.get)
                 st.write(f"- 🏆 **本日表現最佳產線**：**{best_line}**，綜合稼動率達 **{perf_dict[best_line]:.1f}%**。")
                 
-                # 找出表現偏低的產線 (設定標準為 80%)
                 low_perf_lines = [line for line, perf in perf_dict.items() if perf < 80]
                 if low_perf_lines:
                     st.warning(f"- ⚠️ **效能偏低提醒**：產線 **{', '.join(low_perf_lines)}** 今日總稼動率低於 80%，建議檢視表格內的【異常備註】了解是否有待料或設備故障狀況。")
                 else:
                     st.success("- ✨ **整體產能狀況良好**：今日有生產的產線，總稼動率均維持在 80% 以上。")
                     
-            # 統計異常與維修時間
             abnormal_df = df_display[df_display['作業類型'].isin(['機台維修', '待料停機'])]
             if not abnormal_df.empty:
                 abnormal_df['實際花費時間(H)'] = pd.to_numeric(abnormal_df['實際花費時間(H)'], errors='coerce').fillna(0)
@@ -285,7 +290,7 @@ if not df_display.empty and len(df_display) > 0:
                 st.write("- ✅ **異常停機統計**：今日無記錄機台維修或待料停機狀況。")
                 
         else:
-            st.info("尚無產品生產紀錄，無法計算稼動率與產生報告。")
+            st.info("尚無紀錄，無法計算稼動率與產生報告。")
         # -----------------------------------------------------------
 
     except Exception as e:
