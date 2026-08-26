@@ -64,12 +64,14 @@ LINES = ["TR/G7", "TR/7", "PE", "PP"]
 
 EQUIPMENT_ORDER = STERILIZERS + LINES
 
+# 🌟 新增了 生乳 與對應的新終端產品
 PRODUCTS = [
-    "台牧-生乳", "台牧-A2β生乳", "元初-高蛋白濃豆乳", "有飲-開心果四季春奶茶", "全家-抹茶牛乳", "全家-紅茶牛乳",
-    "雲乳-純濃鮮乳", "台牧-茶の魔手專用", "台牧-六甲田莊鮮乳", "台牧-六甲田莊極選A2β鮮乳", "台牧-六甲雙韻茶牛乳", "台牧-六甲純培咖啡牛乳",
+    "台牧-生乳", "雲乳-純濃鮮乳", "台牧-茶の魔手專用", 
+    "元初-高蛋白濃豆乳", "有飲-開心果四季春奶茶", "全家-抹茶牛乳", "全家-紅茶牛乳",
+    "台牧-六甲田莊鮮乳", "台牧-六甲田莊極選A2β鮮乳", "台牧-六甲雙韻茶牛乳", "台牧-六甲純培咖啡牛乳",
     "翔本-特濃厚牛乳", "茗登-提茉西特濃牛乳", "AGV-鮮採梅番茄900", "AGV-梅子番茄400",
     "匯紘-阿薩姆奶茶", "匯紘-阿薩姆青森蘋果奶茶", "匯紘-阿薩姆雙茶會烏龍奶茶",
-    "英泉-全脂牛乳 1837", "英泉-全脂牛乳 946", "牛奶本味", "抹茶本位", "奶茶本位", "芝麻本位", "果汁牛乳",
+    "全脂牛乳 1837", "全脂牛乳 946", "牛奶本味", "抹茶本位", "奶茶本位", "果汁牛乳",
     "台牧-六甲田莊巧克力牛乳乳飲品", "台牧-六甲田莊咖啡牛乳乳飲品",
     "AGV-寒天檸檬", "AGV-寒天百香", "AGV-寒天仙草", "AGV-番茄蜂蜜綜合蔬菜汁",
     "英泉-巧克力", "英泉-麥芽", "英泉-蘋果", "英泉-草莓", "英泉-優酪乳乳酸飲料", "英泉-蔓越莓乳酸飲料",
@@ -96,7 +98,7 @@ if equip_type == "殺菌機":
     selected_equip = st.sidebar.selectbox("殺菌機選擇", STERILIZERS)
     task_type = st.sidebar.radio(
         "作業類型", 
-        ["產品殺菌作業", "設備殺菌", "設備CIP清洗", "機台維修", "待料停機", "中午用餐"]
+        ["產品殺菌作業", "設備蒸汽殺菌", "設備CIP清洗", "機台維修", "待料停機", "中午用餐"]
     )
     
     if task_type == "產品殺菌作業":
@@ -119,7 +121,7 @@ elif equip_type == "生產線":
     selected_equip = st.sidebar.selectbox("生產線選擇", LINES)
     task_type = st.sidebar.radio(
         "作業類型", 
-        ["產品生產", "設備蒸汽殺菌", "設備CIP清洗", "機台維修", "換線作業1837改946", "換料停機", "中午用餐"]
+        ["產品生產", "設備蒸汽殺菌", "設備CIP清洗", "機台維修", "待料停機", "中午用餐"]
     )
     is_production = (task_type == "產品生產")
 
@@ -234,12 +236,10 @@ if not df_display.empty and len(df_display) > 0:
                 hours = int(h_float)
                 minutes = int((h_float - hours) * 60)
                 seconds = int(round((((h_float - hours) * 60) - minutes) * 60))
-                
                 parts = []
                 if hours > 0: parts.append(f"{hours} 小時")
                 if minutes > 0: parts.append(f"{minutes} 分")
                 if seconds > 0: parts.append(f"{seconds} 秒")
-                
                 return " ".join(parts) if parts else "0 秒"
             except:
                 return str(h)
@@ -259,15 +259,11 @@ if not df_display.empty and len(df_display) > 0:
         df_chart['設備稼動率'] = df_chart['設備稼動效率(%)'].astype(str)
         df_chart['產品產出率'] = df_chart['產品產出率(%)'].astype(str)
         
-        # 🌟 --- 核心演算法：時間軸重疊自動分割 (Interval Splitting) ---
         def split_overlapping_blocks(df):
             if df.empty: return df
-            
             interrupt_types = ['機台維修', '待料停機', '中午用餐', '設備蒸汽殺菌', '設備CIP清洗']
-            
             base_blocks = df[~df['作業類型'].isin(interrupt_types)].to_dict('records')
             interrupt_blocks = df[df['作業類型'].isin(interrupt_types)].to_dict('records')
-            
             new_records = []
             
             for base in base_blocks:
@@ -288,7 +284,6 @@ if not df_display.empty and len(df_display) > 0:
                         segment['Start'] = current_start
                         segment['Finish'] = overlap_start
                         new_records.append(segment)
-                    
                     current_start = max(current_start, overlap_end)
                 
                 if current_start < end:
@@ -400,67 +395,87 @@ if not df_display.empty and len(df_display) > 0:
             st.error(f"- 🛠️ **異常停機統計**：今日記錄到機台維修/待料停機，共計影響約 **{total_abnormal_hours:.1f} 小時**。")
         else:
             st.write("- ✅ **異常停機統計**：今日無記錄機台維修或待料停機狀況。")
-
-# (這裡接續原本異常停機統計的 if/else 判斷式結尾...)
-     
-        # 🌟 --- 新增：產品製程物料追蹤與損耗差異分析 (調配 ➔ 殺菌 ➔ 充填) ---
+            
+        # 🌟 --- 新增：物料追蹤與差異分析 (調配 ➔ 殺菌 ➔ 充填) ---
         st.markdown("---")
         st.markdown("#### 💧 產品製程物料追蹤與損耗差異分析 (調配 ➔ 殺菌 ➔ 充填)")
         
-        # 找出當日有生產紀錄的所有產品 (排除非生產作業)
-        prod_records = df_display[df_display['作業類型'].isin(['產品生產', '產品殺菌作業'])]
-        unique_products = [p for p in prod_records['產品名稱'].unique() if str(p).strip() != "" and "非" not in str(p)]
+        # 定義「一對多」的物料關聯表
+        RAW_TO_FINAL_MAP = {
+            "台牧-生乳": ["雲乳-純濃鮮乳", "台牧-茶の魔手專用", "台牧-六甲田莊鮮乳"]
+        }
         
-        if unique_products:
-            for prod_name in unique_products:
-                p_data = df_display[df_display['產品名稱'] == prod_name].copy()
+        FINAL_TO_RAW_MAP = {}
+        for raw, finals in RAW_TO_FINAL_MAP.items():
+            for f in finals:
+                FINAL_TO_RAW_MAP[f] = raw
                 
-                # 確保數值轉換正常
-                p_data['調配生產噸數(T)'] = pd.to_numeric(p_data['調配生產噸數(T)'], errors='coerce').fillna(0)
-                p_data['實際生產數量(瓶)'] = pd.to_numeric(p_data['實際生產數量(瓶)'], errors='coerce').fillna(0)
-                p_data['單瓶容量(ml/g)'] = pd.to_numeric(p_data['單瓶容量(ml/g)'], errors='coerce').fillna(0)
-                p_data['殺菌後成品量(L)'] = pd.to_numeric(p_data['殺菌後成品量(L)'], errors='coerce').fillna(0)
+        prod_records = df_display[df_display['作業類型'].isin(['產品生產', '產品殺菌作業'])]
+        
+        unique_raw_groups = set()
+        for p in prod_records['產品名稱'].unique():
+            if str(p).strip() != "" and "非" not in str(p):
+                # 查表：如果這支產品在關聯表內，就抓出它的「母原料(群組名)」；若無，則自成一組
+                group_name = FINAL_TO_RAW_MAP.get(p, p)
+                unique_raw_groups.add(group_name)
+        
+        if unique_raw_groups:
+            for group_name in unique_raw_groups:
+                # 判斷是否為「一對多」的複合群組
+                if group_name in RAW_TO_FINAL_MAP:
+                    target_ster_names = [group_name]
+                    target_prod_names = RAW_TO_FINAL_MAP[group_name]
+                    display_title = f"{group_name} ➔ (包含終端品項: {', '.join(target_prod_names)})"
+                else:
+                    target_ster_names = [group_name]
+                    target_prod_names = [group_name]
+                    display_title = group_name
                 
-                # 1. 取得生產線資料：計算總調配量與總充填量
-                line_data = p_data[(p_data['設備類別'] == '生產線') & (p_data['作業類型'] == '產品生產')]
-                # 噸(T) 轉換為 公升(L) -> 乘以 1000
+                # 1. 計算生產線資料 (調配總噸數 & 充填總瓶數)
+                line_data = df_display[(df_display['設備類別'] == '生產線') & 
+                                       (df_display['作業類型'] == '產品生產') & 
+                                       (df_display['產品名稱'].isin(target_prod_names))].copy()
+                
+                line_data['調配生產噸數(T)'] = pd.to_numeric(line_data['調配生產噸數(T)'], errors='coerce').fillna(0)
+                line_data['實際生產數量(瓶)'] = pd.to_numeric(line_data['實際生產數量(瓶)'], errors='coerce').fillna(0)
+                line_data['單瓶容量(ml/g)'] = pd.to_numeric(line_data['單瓶容量(ml/g)'], errors='coerce').fillna(0)
+                
                 total_batch_L = line_data['調配生產噸數(T)'].sum() * 1000
-                # 總充填量 (瓶數 * 單瓶容量) 轉換為 公升(L) -> 除以 1000
                 total_output_L = (line_data['實際生產數量(瓶)'] * line_data['單瓶容量(ml/g)']).sum() / 1000.0
                 
-                # 2. 取得殺菌機資料：計算殺菌總產出量
-                ster_data = p_data[(p_data['設備類別'] == '殺菌機') & (p_data['作業類型'] == '產品殺菌作業')]
+                # 2. 計算殺菌機資料 (殺菌總產出量)
+                ster_data = df_display[(df_display['設備類別'] == '殺菌機') & 
+                                       (df_display['作業類型'] == '產品殺菌作業') & 
+                                       (df_display['產品名稱'].isin(target_ster_names))].copy()
+                                       
+                ster_data['殺菌後成品量(L)'] = pd.to_numeric(ster_data['殺菌後成品量(L)'], errors='coerce').fillna(0)
                 total_sterilized_L = ster_data['殺菌後成品量(L)'].sum()
                 
-                # 只要該品項有任何數據，就顯示對應的儀表板
+                # 只要該物料群組有任何數據，就生成專屬看板
                 if total_batch_L > 0 or total_sterilized_L > 0 or total_output_L > 0:
-                    st.markdown(f"**📦 品項：{prod_name}**")
+                    st.markdown(f"**📦 製程物料：{display_title}**")
                     col1, col2, col3 = st.columns(3)
                     
-                    # 計算各階段差異 (負值代表發生損耗，正值代表計算誤差或增量)
                     diff_batch_ster = total_sterilized_L - total_batch_L
                     diff_ster_out = total_output_L - total_sterilized_L
                     
                     with col1:
                         st.metric(label="1. 原料調配總量", value=f"{total_batch_L:,.1f} L")
                     with col2:
-                        # 比較殺菌機與調配量的差異
                         st.metric(
                             label="2. 殺菌機總產出量", 
                             value=f"{total_sterilized_L:,.1f} L", 
-                            delta=f"{diff_batch_ster:,.1f} L (與調配差值)",
+                            delta=f"{diff_batch_ster:,.1f} L (與調配差異)",
                             delta_color="normal"
                         )
                     with col3:
-                        # 比較實際充填與殺菌機的差異
                         st.metric(
                             label="3. 產線實際充填量", 
                             value=f"{total_output_L:,.1f} L", 
-                            delta=f"{diff_ster_out:,.1f} L (與殺菌差值)",
+                            delta=f"{diff_ster_out:,.1f} L (與殺菌差異)",
                             delta_color="normal"
                         )
-                    st.write("") # 增加區塊間距
-                    
+                    st.write("") 
         else:
             st.info("今日尚無完整的產品生產與殺菌紀錄可供追蹤比對。")
 
