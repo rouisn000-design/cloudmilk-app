@@ -238,29 +238,35 @@ if not df_display.empty and len(df_display) > 0:
             df_display['實際花費時間(H)'] = pd.to_numeric(df_display['實際花費時間(H)'], errors='coerce').fillna(0)
             df_display['設備標準產能(瓶/H)'] = pd.to_numeric(df_display['設備標準產能(瓶/H)'], errors='coerce').fillna(0)
             
+            # 建立時間格式以精準計算時間跨度
+            df_display['Start'] = pd.to_datetime(df_display['日期'].astype(str) + ' ' + df_display['開始時間'].astype(str))
+            df_display['Finish'] = pd.to_datetime(df_display['日期'].astype(str) + ' ' + df_display['結束時間'].astype(str))
+            
             cols = st.columns(len(product_mapping.keys()))
             perf_dict = {}
             
             for idx, line in enumerate(product_mapping.keys()):
-                line_data = df_display[df_display['產線'] == line]
                 with cols[idx]:
+                    line_data = df_display[df_display['產線'] == line]
+                    # 單獨過濾出「產品生產」的資料
                     prod_data = line_data[line_data['作業類型'] == '產品生產']
                     
                     if not prod_data.empty and prod_data['實際花費時間(H)'].sum() > 0:
-                        # 1. 取得該線「所有作業」的總時數 (包含殺菌、生產、CIP、維修等)
-                        total_line_hours = line_data['實際花費時間(H)'].sum()
+                        # 1. 取得第一個產品的開始時間，與最後一個產品的結束時間
+                        first_start = prod_data['Start'].min()
+                        last_finish = prod_data['Finish'].max()
+                        total_span_hours = (last_finish - first_start).total_seconds() / 3600.0
                         
-                        # 2. 依據各產品生產時間，計算「加權平均標準產能」
+                        # 2. 計算加權平均標準產能
                         total_prod_hours = prod_data['實際花費時間(H)'].sum()
-                        theoretical_total_prod = (prod_data['設備標準產能(瓶/H)'] * prod_data['實際花費時間(H)']).sum()
-                        weighted_avg_capacity = theoretical_total_prod / total_prod_hours
+                        theoretical_total = (prod_data['設備標準產能(瓶/H)'] * prod_data['實際花費時間(H)']).sum()
+                        weighted_avg_capacity = theoretical_total / total_prod_hours
                         
-                        # 3. 取得實際總產量
                         total_actual_bottles = prod_data['實際生產數量(瓶)'].sum()
                         
-                        # 4. 嚴格版總稼動率計算 (總產量 ÷ [總時間 × 加權平均產能])
-                        if total_line_hours > 0 and weighted_avg_capacity > 0:
-                            line_perf = (total_actual_bottles / (total_line_hours * weighted_avg_capacity)) * 100
+                        # 3. 執行全新的運算邏輯
+                        if total_span_hours > 0 and weighted_avg_capacity > 0:
+                            line_perf = (total_actual_bottles / (total_span_hours * weighted_avg_capacity)) * 100
                             perf_dict[line] = line_perf
                             st.metric(label=f"🟢 {line} 產線總稼動率", value=f"{line_perf:.1f}%")
                         else:
