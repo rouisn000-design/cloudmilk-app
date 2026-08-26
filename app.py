@@ -64,7 +64,6 @@ LINES = ["TR/G7", "TR/7", "PE", "PP"]
 
 EQUIPMENT_ORDER = STERILIZERS + LINES
 
-# 🌟 更新：將 全脂牛乳 1837/946 變更為 英泉-全脂牛乳 1837/946
 PRODUCTS = [
     "台牧-生乳", "雲乳-純濃鮮乳", "台牧-茶の魔手專用", 
     "元初-高蛋白濃豆乳", "有飲-開心果四季春奶茶", "全家-抹茶牛乳", "全家-紅茶牛乳",
@@ -212,6 +211,15 @@ selected_date_str = today.strftime("%Y-%m-%d")
 if not df.empty and '日期' in df.columns:
     df_display = df[df['日期'] == selected_date_str].copy()
     
+    # 🌟 關鍵修復 1：確保所有必要的數值欄位都存在，如果 Google Sheet 漏掉或打錯字就自動補零
+    expected_cols = [
+        '調配生產噸數(T)', '實際生產數量(瓶)', '單瓶容量(ml/g)', 
+        '殺菌後成品量(L)', '實際花費時間(H)', '設備標準產能(瓶/H)'
+    ]
+    for col in expected_cols:
+        if col not in df_display.columns:
+            df_display[col] = 0
+
     def fix_time_format(t):
         t = str(t).strip()
         if t.count(':') == 1:
@@ -352,6 +360,7 @@ if not df_display.empty and len(df_display) > 0:
         # --- 系統自動化分析報告與各線稼動率看板 ---
         st.markdown(f"### 📊 {selected_date_str} 各產線整體效能與分析報告")
         
+        # 🌟 關鍵修復 2：在此處將欄位轉換為數字時，我們已經透過上方的防呆機制確保這些欄位絕對存在了！
         df_display['實際生產數量(瓶)'] = pd.to_numeric(df_display['實際生產數量(瓶)'], errors='coerce').fillna(0)
         df_display['實際花費時間(H)'] = pd.to_numeric(df_display['實際花費時間(H)'], errors='coerce').fillna(0)
         df_display['設備標準產能(瓶/H)'] = pd.to_numeric(df_display['設備標準產能(瓶/H)'], errors='coerce').fillna(0)
@@ -409,7 +418,6 @@ if not df_display.empty and len(df_display) > 0:
         st.markdown("---")
         st.markdown("#### 💧 產品製程物料追蹤與損耗差異分析 (調配 ➔ 殺菌 ➔ 充填)")
         
-        # 🌟 更新：「一對多」的物料關聯表 (加入 英泉-全脂牛乳 1837)
         RAW_TO_FINAL_MAP = {
             "台牧-生乳": ["雲乳-純濃鮮乳", "台牧-茶の魔手專用", "台牧-六甲田莊鮮乳"],
             "英泉-全脂牛乳 1837": ["英泉-全脂牛乳 1837", "英泉-全脂牛乳 946"]
