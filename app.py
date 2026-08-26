@@ -60,6 +60,10 @@ product_mapping = {
 st.sidebar.header("現場生產紀錄輸入")
 today = st.sidebar.date_input("紀錄日期", date.today())
 selected_line = st.sidebar.selectbox("生產線選擇", list(product_mapping.keys()))
+# 👇 就是這一段！新增的殺菌機選擇 👇
+sterilizer = st.sidebar.selectbox(
+    "殺菌機選擇", 
+    ["GEA 12噸板式殺菌機", "APV 12噸板式殺菌機", "鉅鵬 4噸管式殺菌機", ]
 
 task_type = st.sidebar.radio(
     "作業類型", 
