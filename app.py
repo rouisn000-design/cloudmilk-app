@@ -64,7 +64,7 @@ LINES = ["TR/G7", "TR/7", "PE", "PP"]
 
 EQUIPMENT_ORDER = STERILIZERS + LINES
 
-# 🌟 新增了 生乳 與對應的新終端產品
+# 包含生乳與對應新終端產品
 PRODUCTS = [
     "台牧-生乳", "雲乳-純濃鮮乳", "台牧-茶の魔手專用", 
     "元初-高蛋白濃豆乳", "有飲-開心果四季春奶茶", "全家-抹茶牛乳", "全家-紅茶牛乳",
@@ -210,7 +210,18 @@ df = fetch_data()
 selected_date_str = today.strftime("%Y-%m-%d")
 
 if not df.empty and '日期' in df.columns:
-    df_display = df[df['日期'] == selected_date_str]
+    # 🌟 關鍵修復：複製一份資料並統一時間格式，補齊秒數
+    df_display = df[df['日期'] == selected_date_str].copy()
+    
+    def fix_time_format(t):
+        t = str(t).strip()
+        # 如果格式是 HH:MM (只有一個冒號)，就自動補上 :00
+        if t.count(':') == 1:
+            return t + ":00"
+        return t
+        
+    df_display['開始時間'] = df_display['開始時間'].apply(fix_time_format)
+    df_display['結束時間'] = df_display['結束時間'].apply(fix_time_format)
 else:
     df_display = pd.DataFrame()
 
@@ -415,13 +426,11 @@ if not df_display.empty and len(df_display) > 0:
         unique_raw_groups = set()
         for p in prod_records['產品名稱'].unique():
             if str(p).strip() != "" and "非" not in str(p):
-                # 查表：如果這支產品在關聯表內，就抓出它的「母原料(群組名)」；若無，則自成一組
                 group_name = FINAL_TO_RAW_MAP.get(p, p)
                 unique_raw_groups.add(group_name)
         
         if unique_raw_groups:
             for group_name in unique_raw_groups:
-                # 判斷是否為「一對多」的複合群組
                 if group_name in RAW_TO_FINAL_MAP:
                     target_ster_names = [group_name]
                     target_prod_names = RAW_TO_FINAL_MAP[group_name]
@@ -431,7 +440,6 @@ if not df_display.empty and len(df_display) > 0:
                     target_prod_names = [group_name]
                     display_title = group_name
                 
-                # 1. 計算生產線資料 (調配總噸數 & 充填總瓶數)
                 line_data = df_display[(df_display['設備類別'] == '生產線') & 
                                        (df_display['作業類型'] == '產品生產') & 
                                        (df_display['產品名稱'].isin(target_prod_names))].copy()
@@ -443,7 +451,6 @@ if not df_display.empty and len(df_display) > 0:
                 total_batch_L = line_data['調配生產噸數(T)'].sum() * 1000
                 total_output_L = (line_data['實際生產數量(瓶)'] * line_data['單瓶容量(ml/g)']).sum() / 1000.0
                 
-                # 2. 計算殺菌機資料 (殺菌總產出量)
                 ster_data = df_display[(df_display['設備類別'] == '殺菌機') & 
                                        (df_display['作業類型'] == '產品殺菌作業') & 
                                        (df_display['產品名稱'].isin(target_ster_names))].copy()
@@ -451,7 +458,6 @@ if not df_display.empty and len(df_display) > 0:
                 ster_data['殺菌後成品量(L)'] = pd.to_numeric(ster_data['殺菌後成品量(L)'], errors='coerce').fillna(0)
                 total_sterilized_L = ster_data['殺菌後成品量(L)'].sum()
                 
-                # 只要該物料群組有任何數據，就生成專屬看板
                 if total_batch_L > 0 or total_sterilized_L > 0 or total_output_L > 0:
                     st.markdown(f"**📦 製程物料：{display_title}**")
                     col1, col2, col3 = st.columns(3)
