@@ -37,11 +37,12 @@ def fetch_data():
             if records:
                 return pd.DataFrame(records)
             else:
+                # 🌟 更新：新增「殺菌後成品量(L)」欄位
                 return pd.DataFrame(columns=[
                     '日期', '設備類別', '設備名稱', '作業類型', '產品名稱', 
                     '開始時間', '結束時間', '實際花費時間(H)', '實際生產數量(瓶)', 
                     '單瓶容量(ml/g)', '調配生產噸數(T)',
-                    '設備標準產能(瓶/H)', '設備稼動效率(%)', '產品產出率(%)', '備註'
+                    '設備標準產能(瓶/H)', '設備稼動效率(%)', '產品產出率(%)', '殺菌後成品量(L)', '備註'
                 ])
         except Exception as e:
             st.warning(f"讀取資料異常: {e}")
@@ -93,10 +94,7 @@ performance_rate = 0.0
 yield_rate = 0.0
 
 if equip_type == "殺菌機":
-    # --- 🟢 殺菌機專屬輸入介面 ---
     selected_equip = st.sidebar.selectbox("殺菌機選擇", STERILIZERS)
-    
-    # 🌟 補回：殺菌機專屬的作業類型與產品選擇
     task_type = st.sidebar.radio(
         "作業類型", 
         ["產品殺菌作業", "設備蒸汽殺菌", "設備CIP清洗", "機台維修", "待料停機", "中午用餐"]
@@ -119,7 +117,6 @@ if equip_type == "殺菌機":
     standard_rate = capacity
 
 elif equip_type == "生產線":
-    # --- 🔵 生產線專屬輸入介面 ---
     selected_equip = st.sidebar.selectbox("生產線選擇", LINES)
     task_type = st.sidebar.radio(
         "作業類型", 
@@ -158,8 +155,20 @@ if st.sidebar.button("確認送出紀錄"):
     else:
         t1 = datetime.combine(today, start_time)
         t2 = datetime.combine(today, end_time)
-        actual_hours = (t2 - t1).total_seconds() / 3600
         
+        # 精確計算總秒數與小時
+        total_seconds = (t2 - t1).total_seconds()
+        actual_hours = total_seconds / 3600.0
+        
+        sterilized_volume = 0.0
+        
+        # 1. 殺菌機產量計算邏輯：總秒數 * 每秒能力
+        if equip_type == "殺菌機" and task_type == "產品殺菌作業":
+            if total_seconds > 0 and standard_rate > 0:
+                capacity_per_second = standard_rate / 3600.0
+                sterilized_volume = total_seconds * capacity_per_second
+
+        # 2. 生產線效能計算邏輯
         if equip_type == "生產線" and task_type == "產品生產":
             if actual_hours > 0 and standard_rate > 0:
                 theoretical_output = standard_rate * actual_hours
@@ -171,6 +180,7 @@ if st.sidebar.button("確認送出紀錄"):
         
         time_format = "%H:%M:%S" if equip_type == "殺菌機" else "%H:%M"
 
+        # 🌟 寫入新列資料，並對應 Google Sheet 新增的第 15 欄
         new_row = [
             today.strftime("%Y-%m-%d"), 
             equip_type,
@@ -179,13 +189,14 @@ if st.sidebar.button("確認送出紀錄"):
             selected_product,
             start_time.strftime(time_format), 
             end_time.strftime(time_format),
-            round(actual_hours, 3), 
+            round(actual_hours, 4), 
             bottle_count if equip_type == "生產線" else "-", 
             bottle_weight if equip_type == "生產線" and task_type == "產品生產" else "-",
             round(batch_tons, 2) if equip_type == "生產線" and task_type == "產品生產" else "-",
             standard_rate, 
             f"{round(performance_rate, 1)}%" if equip_type == "生產線" and task_type == "產品生產" else "-",
             f"{round(yield_rate, 1)}%" if equip_type == "生產線" and task_type == "產品生產" else "-",
+            round(sterilized_volume, 2) if equip_type == "殺菌機" and task_type == "產品殺菌作業" else "-", # 新增欄位寫入
             remarks  
         ]
         
@@ -239,9 +250,17 @@ if not df_display.empty and len(df_display) > 0:
                 return str(h)
 
         df_chart['花費時間'] = df_chart['實際花費時間(H)'].apply(format_duration)
-        df_chart['產量'] = df_chart.apply(
-            lambda x: f"{x['實際生產數量(瓶)']} 瓶" if x['作業類型'] == '產品生產' else "無", axis=1
-        )
+        
+        # 整合生產線產量與殺菌機產量，以供懸浮視窗顯示
+        def get_production_info(row):
+            if row['作業類型'] == '產品生產':
+                return f"{row['實際生產數量(瓶)']} 瓶"
+            elif row['作業類型'] == '產品殺菌作業':
+                volume = row.get('殺菌後成品量(L)', "-")
+                return f"{volume} L" if volume != "-" else "無紀錄"
+            return "無"
+            
+        df_chart['產出量'] = df_chart.apply(get_production_info, axis=1)
         
         df_chart['備註說明'] = df_chart['備註'].apply(lambda x: x if pd.notnull(x) and str(x).strip() != '' else '無')
         df_chart['設備稼動率'] = df_chart['設備稼動效率(%)'].astype(str)
@@ -260,7 +279,7 @@ if not df_display.empty and len(df_display) > 0:
                 "Start": True,
                 "Finish": True,
                 "花費時間": True,
-                "產量": True,
+                "產出量": True,      # 🌟 生產線顯示「瓶」，殺菌機顯示「L」
                 "設備稼動率": True,  
                 "產品產出率": True,  
                 "備註說明": True, 
