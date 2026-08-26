@@ -174,8 +174,11 @@ if not df_display.empty and len(df_display) > 0:
             lambda x: f"{x['實際生產數量(瓶)']} 瓶" if x['作業類型'] == '產品生產' else "無", axis=1
         )
         
-        # 🌟 處理備註欄位：確保甘特圖懸浮視窗能正確顯示
         df_chart['備註說明'] = df_chart['備註'].apply(lambda x: x if pd.notnull(x) and str(x).strip() != '' else '無')
+        
+        # 🌟 新增：準備好稼動率與產出率的資料
+        df_chart['設備稼動率'] = df_chart['設備稼動效率(%)'].astype(str)
+        df_chart['產品產出率'] = df_chart['產品產出率(%)'].astype(str)
         
         fig = px.timeline(
             df_chart, 
@@ -191,7 +194,9 @@ if not df_display.empty and len(df_display) > 0:
                 "Finish": True,
                 "花費時間": True,
                 "產量": True,
-                "備註說明": True, # 🌟 將備註加入懸浮視窗
+                "設備稼動率": True,  # 🌟 加入懸浮視窗
+                "產品產出率": True,  # 🌟 加入懸浮視窗
+                "備註說明": True, 
                 "產線": False
             },
             title=f"{selected_date_str} 當日生產與設備保養排程", 
