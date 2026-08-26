@@ -17,7 +17,6 @@ def init_connection():
         scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         client = gspread.authorize(creds)
-        # 🌟 請確認下方引號內的名稱，與您 Google 試算表的名稱完全一致！
         sheet = client.open("產線生產紀錄_DB").sheet1
         return sheet
     except Exception as e:
@@ -38,20 +37,20 @@ def fetch_data():
             if records:
                 return pd.DataFrame(records)
             else:
-                # 若試算表為空，回傳包含新擴充欄位的空表頭
+                # 若試算表為空，回傳包含新擴充欄位的空表頭 (🌟 新增備註欄位)
                 return pd.DataFrame(columns=[
                     '日期', '產線', '作業類型', '產品名稱', 
                     '開始時間', '結束時間', '實際花費時間(H)', '實際生產數量(瓶)', 
                     '單瓶容量(ml/g)', '調配生產噸數(T)',
-                    '設備標準產能(瓶/H)', '設備稼動效率(%)', '產品產出率(%)'
+                    '設備標準產能(瓶/H)', '設備稼動效率(%)', '產品產出率(%)', '備註'
                 ])
         except Exception as e:
              st.warning(f"讀取資料異常: {e}")
     return pd.DataFrame()
 
-# 產線與產品連動字典 (已新增 PP 產線與對應品項)
+# 產線與產品連動字典
 product_mapping = {
-   "TR/G7": ["元初-高蛋白濃豆乳", "有飲-開心果四季春奶茶", "全家-抹茶牛乳", "全家-紅茶牛乳", "雲乳-純濃牛乳", "台牧-茶の魔手專用", "台牧-六甲田莊鮮乳", "台牧-六甲田莊極選A2β鮮乳", "台牧-六甲雙韻茶牛乳", "台牧-六甲純培咖啡牛乳", "翔本-特濃厚牛乳", "茗登-提茉西特濃牛乳", "AGV-鮮採梅番茄900", "AGV-梅子番茄400", "匯紘-阿薩姆奶茶", "匯紘-阿薩姆青森蘋果奶茶", "匯紘-阿薩姆雙茶會烏龍奶茶" ],
+    "TR/G7": ["元初-高蛋白濃豆乳", "有飲-開心果四季春奶茶", "全家-抹茶牛乳", "全家-紅茶牛乳", "雲乳-純濃牛乳", "台牧-茶の魔手專用", "台牧-六甲田莊鮮乳", "台牧-六甲田莊極選A2β鮮乳", "台牧-六甲雙韻茶牛乳", "台牧-六甲純培咖啡牛乳", "翔本-特濃厚牛乳", "茗登-提茉西特濃牛乳", "AGV-鮮採梅番茄900", "AGV-梅子番茄400", "匯紘-阿薩姆奶茶", "匯紘-阿薩姆青森蘋果奶茶", "匯紘-阿薩姆雙茶會烏龍奶茶" ],
     "TR/7":  ["元初-高蛋白濃豆乳", "有飲-開心果四季春奶茶", "全家-抹茶牛乳", "全家-紅茶牛乳", "翔本-特濃厚牛乳", "AGV-鮮採梅番茄900", "AGV-梅子番茄400", "匯紘-阿薩姆奶茶", "匯紘-阿薩姆青森蘋果奶茶", "匯紘-阿薩姆雙茶會烏龍奶茶" ],
     "PE": ["全脂牛乳 1837", "全脂牛乳 946", "牛奶本味", "抹茶本位", "奶茶本位", "果汁牛乳", "台牧-六甲田莊巧克力牛乳乳飲品", "台牧-六甲田莊咖啡牛乳乳飲品" ], 
     "PP": ["AGV-寒天檸檬", "AGV-寒天百香", "AGV-寒天仙草", "AGV-番茄蜂蜜綜合蔬菜汁","英泉-巧克力", "英泉-麥芽", "英泉-蘋果", "英泉-草莓", "英泉-優酪乳乳酸飲料", "英泉-蔓越莓乳酸飲料","台牧-六甲田莊鮮乳", "台牧-六甲田莊牛乳", "台牧-極選牛乳", "台牧-珍稀牛乳" ], 
@@ -61,7 +60,12 @@ product_mapping = {
 st.sidebar.header("現場生產紀錄輸入")
 today = st.sidebar.date_input("紀錄日期", date.today())
 selected_line = st.sidebar.selectbox("生產線選擇", list(product_mapping.keys()))
-task_type = st.sidebar.radio("作業類型", ["產品生產", "設備蒸汽殺菌", "設備CIP清洗"])
+
+# 🌟 擴充作業類型選項
+task_type = st.sidebar.radio(
+    "作業類型", 
+    ["產品生產", "設備蒸汽殺菌", "設備CIP清洗", "機台維修", "待料停機", "中午用餐"]
+)
 
 if task_type == "產品生產":
     selected_product = st.sidebar.selectbox("產品名稱", product_mapping[selected_line])
@@ -88,6 +92,10 @@ else:
     standard_rate = 0
     batch_tons = 0
 
+st.sidebar.markdown("---")
+# 🌟 新增備註輸入區
+remarks = st.sidebar.text_area("備註 (異常原因說明)", placeholder="若有異常、維修或特殊狀況，請簡述說明...")
+
 # --- 資料寫入與系統自動計算邏輯 ---
 if st.sidebar.button("確認送出紀錄"):
     if end_time <= start_time:
@@ -105,17 +113,15 @@ if st.sidebar.button("確認送出紀錄"):
         
         # 只有在「產品生產」時才計算效能與產出率
         if task_type == "產品生產":
-            # 1. 計算設備稼動效率： 實際數量 / (標準時產能 * 實際小時)
             if actual_hours > 0 and standard_rate > 0:
                 theoretical_output = standard_rate * actual_hours
                 performance_rate = (bottle_count / theoretical_output) * 100
                 
-            # 2. 計算產品產出率： (實際裝瓶總量) / 調配生產噸數
             if batch_tons > 0:
                 actual_tons_filled = (bottle_count * bottle_weight) / 1000000
                 yield_rate = (actual_tons_filled / batch_tons) * 100
         
-        # 準備寫入 Google 試算表的一列資料
+        # 準備寫入 Google 試算表的一列資料 (🌟 寫入備註內容)
         new_row = [
             today.strftime("%Y-%m-%d"), 
             selected_line, 
@@ -129,7 +135,8 @@ if st.sidebar.button("確認送出紀錄"):
             round(batch_tons, 2) if task_type == "產品生產" else "-",
             standard_rate if task_type == "產品生產" else "-",
             f"{round(performance_rate, 1)}%" if task_type == "產品生產" else "-",
-            f"{round(yield_rate, 1)}%" if task_type == "產品生產" else "-"
+            f"{round(yield_rate, 1)}%" if task_type == "產品生產" else "-",
+            remarks  
         ]
         
         # 執行寫入
@@ -143,11 +150,9 @@ if st.sidebar.button("確認送出紀錄"):
 # --- 主畫面：讀取雲端資料並渲染 ---
 df = fetch_data()
 
-# 🌟 核心優化：依照左側欄選擇的「紀錄日期」來過濾資料
 selected_date_str = today.strftime("%Y-%m-%d")
 
 if not df.empty:
-    # 只保留資料庫中「日期」符合所選日期的資料
     df_display = df[df['日期'] == selected_date_str]
 else:
     df_display = pd.DataFrame()
@@ -157,22 +162,21 @@ st.subheader(f"一、 產線即時排程可視化 ({selected_date_str})")
 if not df_display.empty and len(df_display) > 0:
     try:
         df_chart = df_display.copy()
-        # 建立標準時間格式
         df_chart['Start'] = pd.to_datetime(df_chart['日期'].astype(str) + ' ' + df_chart['開始時間'].astype(str))
         df_chart['Finish'] = pd.to_datetime(df_chart['日期'].astype(str) + ' ' + df_chart['結束時間'].astype(str))
         
-        # 判斷要顯示在甘特圖上的文字
         df_chart['顯示標籤'] = df_chart.apply(
             lambda x: x['產品名稱'] if x['作業類型'] == '產品生產' else x['作業類型'], axis=1
         )
         
-        # 準備要放進懸浮視窗的詳細資訊
         df_chart['花費時間'] = df_chart['實際花費時間(H)'].astype(str) + " 小時"
         df_chart['產量'] = df_chart.apply(
             lambda x: f"{x['實際生產數量(瓶)']} 瓶" if x['作業類型'] == '產品生產' else "無", axis=1
         )
         
-        # 繪製進階版甘特圖
+        # 🌟 處理備註欄位：確保甘特圖懸浮視窗能正確顯示
+        df_chart['備註說明'] = df_chart['備註'].apply(lambda x: x if pd.notnull(x) and str(x).strip() != '' else '無')
+        
         fig = px.timeline(
             df_chart, 
             x_start="Start", 
@@ -187,16 +191,15 @@ if not df_display.empty and len(df_display) > 0:
                 "Finish": True,
                 "花費時間": True,
                 "產量": True,
+                "備註說明": True, # 🌟 將備註加入懸浮視窗
                 "產線": False
             },
             title=f"{selected_date_str} 當日生產與設備保養排程", 
             height=400 
         )
         
-        # 反轉 Y 軸讓產線由上往下排列
         fig.update_yaxes(autorange="reversed", title_text="") 
         
-        # 優化 X 軸時間顯示方式
         fig.update_xaxes(
             title_text="",
             tickformat="%H:%M",  
@@ -204,10 +207,8 @@ if not df_display.empty and len(df_display) > 0:
             tickangle=45
         )
         
-        # 文字置中對齊，自動縮放
         fig.update_traces(textposition='inside', insidetextanchor='middle')
         
-        # 圖例與邊界優化
         fig.update_layout(
             legend_title_text="作業項目",
             legend=dict(
