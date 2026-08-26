@@ -169,14 +169,31 @@ if not df_display.empty and len(df_display) > 0:
             lambda x: x['產品名稱'] if x['作業類型'] == '產品生產' else x['作業類型'], axis=1
         )
         
-        df_chart['花費時間'] = df_chart['實際花費時間(H)'].astype(str) + " 小時"
+        # 🌟 新增：時間格式自動轉換公式 (將 4.6 轉為 4 小時 36 分鐘)
+        def format_duration(h):
+            try:
+                h_float = float(h)
+                hours = int(h_float)
+                minutes = int(round((h_float - hours) * 60))
+                
+                if hours > 0 and minutes > 0:
+                    return f"{hours} 小時 {minutes} 分鐘"
+                elif hours > 0:
+                    return f"{hours} 小時"
+                else:
+                    return f"{minutes} 分鐘"
+            except:
+                return str(h)
+
+        # 套用轉換公式
+        df_chart['花費時間'] = df_chart['實際花費時間(H)'].apply(format_duration)
+        
         df_chart['產量'] = df_chart.apply(
             lambda x: f"{x['實際生產數量(瓶)']} 瓶" if x['作業類型'] == '產品生產' else "無", axis=1
         )
         
         df_chart['備註說明'] = df_chart['備註'].apply(lambda x: x if pd.notnull(x) and str(x).strip() != '' else '無')
         
-        # 🌟 新增：準備好稼動率與產出率的資料
         df_chart['設備稼動率'] = df_chart['設備稼動效率(%)'].astype(str)
         df_chart['產品產出率'] = df_chart['產品產出率(%)'].astype(str)
         
@@ -194,8 +211,8 @@ if not df_display.empty and len(df_display) > 0:
                 "Finish": True,
                 "花費時間": True,
                 "產量": True,
-                "設備稼動率": True,  # 🌟 加入懸浮視窗
-                "產品產出率": True,  # 🌟 加入懸浮視窗
+                "設備稼動率": True,  
+                "產品產出率": True,  
                 "備註說明": True, 
                 "產線": False
             },
