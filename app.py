@@ -54,9 +54,14 @@ STERILIZERS = [
     "鉅鵬 4噸管式殺菌機"
 ]
 
+STERILIZER_CAPACITY = {
+    "GEA 12噸板式殺菌機": 12000,
+    "APV 12噸板式殺菌機": 12000,
+    "鉅鵬 4噸管式殺菌機": 4000
+}
+
 LINES = ["TR/G7", "TR/7", "PE", "PP"]
 
-# 排序清單：確保殺菌機永遠排在最上方
 EQUIPMENT_ORDER = STERILIZERS + LINES
 
 PRODUCTS = [
@@ -75,17 +80,46 @@ PRODUCTS = [
 st.sidebar.header("現場生產紀錄輸入")
 today = st.sidebar.date_input("紀錄日期", date.today())
 
-# 1. 獨立選擇設備類別
 equip_type = st.sidebar.radio("選擇作業對象類別", ["殺菌機", "生產線"])
 
+selected_equip = ""
+task_type = "-"
+selected_product = "-"
+bottle_count = 0
+bottle_weight = 0
+standard_rate = 0
+batch_tons = 0
+performance_rate = 0.0
+yield_rate = 0.0
+
 if equip_type == "殺菌機":
+    # --- 🟢 殺菌機專屬輸入介面 ---
     selected_equip = st.sidebar.selectbox("殺菌機選擇", STERILIZERS)
+    
+    # 🌟 補回：殺菌機專屬的作業類型與產品選擇
     task_type = st.sidebar.radio(
         "作業類型", 
         ["產品殺菌作業", "設備蒸汽殺菌", "設備CIP清洗", "機台維修", "待料停機", "中午用餐"]
     )
-    is_production = (task_type == "產品殺菌作業")
-else:
+    
+    if task_type == "產品殺菌作業":
+        selected_product = st.sidebar.selectbox("產品名稱", PRODUCTS)
+    else:
+        selected_product = "-- (非產品殺菌作業) --"
+    
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("時間與參數設定")
+    start_time = st.sidebar.time_input("開始時間 (作業開始)", step=1)
+    end_time = st.sidebar.time_input("結束時間 (作業結束)", step=1)
+    
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("🎯 設備能力參數")
+    capacity = STERILIZER_CAPACITY.get(selected_equip, 0)
+    st.sidebar.text_input("設備能力 (L/H)", value=f"{capacity} L", disabled=True)
+    standard_rate = capacity
+
+elif equip_type == "生產線":
+    # --- 🔵 生產線專屬輸入介面 ---
     selected_equip = st.sidebar.selectbox("生產線選擇", LINES)
     task_type = st.sidebar.radio(
         "作業類型", 
@@ -93,30 +127,24 @@ else:
     )
     is_production = (task_type == "產品生產")
 
-# 2. 獨立選擇產品
-if is_production:
-    selected_product = st.sidebar.selectbox("產品名稱", PRODUCTS)
-else:
-    selected_product = "-- (非生產/殺菌作業) --"
+    if is_production:
+        selected_product = st.sidebar.selectbox("產品名稱", PRODUCTS)
+    else:
+        selected_product = "-- (非生產作業) --"
 
-st.sidebar.markdown("---")
-st.sidebar.subheader("時間與參數設定")
-start_time = st.sidebar.time_input("開始時間 (作業開始)")
-end_time = st.sidebar.time_input("結束時間 (作業結束)")
-
-if is_production:
-    bottle_count = st.sidebar.number_input("實際生產數量 (瓶)", min_value=0, value=5000, step=100)
-    bottle_weight = st.sidebar.number_input("單瓶容量/重量 (ml/g)", min_value=0, value=946, step=1)
-    
     st.sidebar.markdown("---")
-    st.sidebar.subheader("🎯 效能分析參數")
-    standard_rate = st.sidebar.number_input("設備標準產能 (瓶/H)", min_value=1, value=6000, step=100)
-    batch_tons = st.sidebar.number_input("調配(生產)噸數 (T)", min_value=0.0, value=5.0, step=0.1)
-else:
-    bottle_count = 0
-    bottle_weight = 0
-    standard_rate = 0
-    batch_tons = 0
+    st.sidebar.subheader("時間與參數設定")
+    start_time = st.sidebar.time_input("開始時間 (首件/作業開始)")
+    end_time = st.sidebar.time_input("結束時間 (末件/作業結束)")
+
+    if is_production:
+        bottle_count = st.sidebar.number_input("實際生產數量 (瓶)", min_value=0, value=5000, step=100)
+        bottle_weight = st.sidebar.number_input("單瓶容量/重量 (ml/g)", min_value=0, value=946, step=1)
+        
+        st.sidebar.markdown("---")
+        st.sidebar.subheader("🎯 效能分析參數")
+        standard_rate = st.sidebar.number_input("設備標準產能 (瓶/H)", min_value=1, value=6000, step=100)
+        batch_tons = st.sidebar.number_input("調配(生產)噸數 (T)", min_value=0.0, value=5.0, step=0.1)
 
 st.sidebar.markdown("---")
 remarks = st.sidebar.text_area("備註 (異常原因說明)", placeholder="若有異常、維修或特殊狀況，請簡述說明...")
@@ -132,10 +160,7 @@ if st.sidebar.button("確認送出紀錄"):
         t2 = datetime.combine(today, end_time)
         actual_hours = (t2 - t1).total_seconds() / 3600
         
-        performance_rate = 0.0
-        yield_rate = 0.0
-        
-        if is_production:
+        if equip_type == "生產線" and task_type == "產品生產":
             if actual_hours > 0 and standard_rate > 0:
                 theoretical_output = standard_rate * actual_hours
                 performance_rate = (bottle_count / theoretical_output) * 100
@@ -144,21 +169,23 @@ if st.sidebar.button("確認送出紀錄"):
                 actual_tons_filled = (bottle_count * bottle_weight) / 1000000
                 yield_rate = (actual_tons_filled / batch_tons) * 100
         
+        time_format = "%H:%M:%S" if equip_type == "殺菌機" else "%H:%M"
+
         new_row = [
             today.strftime("%Y-%m-%d"), 
             equip_type,
             selected_equip, 
             task_type,
             selected_product,
-            start_time.strftime("%H:%M"), 
-            end_time.strftime("%H:%M"),
-            round(actual_hours, 2), 
-            bottle_count, 
-            bottle_weight if is_production else "-",
-            round(batch_tons, 2) if is_production else "-",
-            standard_rate if is_production else "-",
-            f"{round(performance_rate, 1)}%" if is_production else "-",
-            f"{round(yield_rate, 1)}%" if is_production else "-",
+            start_time.strftime(time_format), 
+            end_time.strftime(time_format),
+            round(actual_hours, 3), 
+            bottle_count if equip_type == "生產線" else "-", 
+            bottle_weight if equip_type == "生產線" and task_type == "產品生產" else "-",
+            round(batch_tons, 2) if equip_type == "生產線" and task_type == "產品生產" else "-",
+            standard_rate, 
+            f"{round(performance_rate, 1)}%" if equip_type == "生產線" and task_type == "產品生產" else "-",
+            f"{round(yield_rate, 1)}%" if equip_type == "生產線" and task_type == "產品生產" else "-",
             remarks  
         ]
         
@@ -185,7 +212,6 @@ if not df_display.empty and len(df_display) > 0:
     try:
         df_chart = df_display.copy()
         
-        # 兼容欄位名稱 (設備名稱 / 產線)
         if '設備名稱' not in df_chart.columns and '產線' in df_chart.columns:
             df_chart['設備名稱'] = df_chart['產線']
             
@@ -200,26 +226,27 @@ if not df_display.empty and len(df_display) > 0:
             try:
                 h_float = float(h)
                 hours = int(h_float)
-                minutes = int(round((h_float - hours) * 60))
-                if hours > 0 and minutes > 0:
-                    return f"{hours} 小時 {minutes} 分鐘"
-                elif hours > 0:
-                    return f"{hours} 小時"
-                else:
-                    return f"{minutes} 分鐘"
+                minutes = int((h_float - hours) * 60)
+                seconds = int(round((((h_float - hours) * 60) - minutes) * 60))
+                
+                parts = []
+                if hours > 0: parts.append(f"{hours} 小時")
+                if minutes > 0: parts.append(f"{minutes} 分")
+                if seconds > 0: parts.append(f"{seconds} 秒")
+                
+                return " ".join(parts) if parts else "0 秒"
             except:
                 return str(h)
 
         df_chart['花費時間'] = df_chart['實際花費時間(H)'].apply(format_duration)
         df_chart['產量'] = df_chart.apply(
-            lambda x: f"{x['實際生產數量(瓶)']} 瓶" if x['作業類型'] in ['產品生產', '產品殺菌作業'] else "無", axis=1
+            lambda x: f"{x['實際生產數量(瓶)']} 瓶" if x['作業類型'] == '產品生產' else "無", axis=1
         )
         
         df_chart['備註說明'] = df_chart['備註'].apply(lambda x: x if pd.notnull(x) and str(x).strip() != '' else '無')
         df_chart['設備稼動率'] = df_chart['設備稼動效率(%)'].astype(str)
         df_chart['產品產出率'] = df_chart['產品產出率(%)'].astype(str)
         
-        # 繪製甘特圖
         fig = px.timeline(
             df_chart, 
             x_start="Start", 
@@ -243,7 +270,6 @@ if not df_display.empty and len(df_display) > 0:
             height=480 
         )
         
-        # 🌟 核心：強制鎖定 Y 軸排列順序 (殺菌機在上方，生產線在下方)
         fig.update_yaxes(
             categoryorder="array",
             categoryarray=list(reversed(EQUIPMENT_ORDER)),
@@ -252,7 +278,7 @@ if not df_display.empty and len(df_display) > 0:
         
         fig.update_xaxes(
             title_text="",
-            tickformat="%H:%M",  
+            tickformat="%H:%M:%S",  
             dtick=3600000,       
             tickangle=45
         )
@@ -275,7 +301,6 @@ if not df_display.empty and len(df_display) > 0:
         df_display['Start'] = pd.to_datetime(df_display['日期'].astype(str) + ' ' + df_display['開始時間'].astype(str))
         df_display['Finish'] = pd.to_datetime(df_display['日期'].astype(str) + ' ' + df_display['結束時間'].astype(str))
         
-        # 針對 4 條生產線計算稼動率看板
         cols = st.columns(len(LINES))
         perf_dict = {}
         
