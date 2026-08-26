@@ -220,7 +220,7 @@ else:
 st.subheader(f"一、 產線與殺菌即時排程可視化 ({selected_date_str})")
 
 if not df_display.empty and len(df_display) > 0:
-    try:
+try:
         df_chart = df_display.copy()
         
         if '設備名稱' not in df_chart.columns and '產線' in df_chart.columns:
@@ -239,19 +239,16 @@ if not df_display.empty and len(df_display) > 0:
                 hours = int(h_float)
                 minutes = int((h_float - hours) * 60)
                 seconds = int(round((((h_float - hours) * 60) - minutes) * 60))
-                
                 parts = []
                 if hours > 0: parts.append(f"{hours} 小時")
                 if minutes > 0: parts.append(f"{minutes} 分")
                 if seconds > 0: parts.append(f"{seconds} 秒")
-                
                 return " ".join(parts) if parts else "0 秒"
             except:
                 return str(h)
 
         df_chart['花費時間'] = df_chart['實際花費時間(H)'].apply(format_duration)
         
-        # 整合生產線產量與殺菌機產量，以供懸浮視窗顯示
         def get_production_info(row):
             if row['作業類型'] == '產品生產':
                 return f"{row['實際生產數量(瓶)']} 瓶"
@@ -261,13 +258,63 @@ if not df_display.empty and len(df_display) > 0:
             return "無"
             
         df_chart['產出量'] = df_chart.apply(get_production_info, axis=1)
-        
         df_chart['備註說明'] = df_chart['備註'].apply(lambda x: x if pd.notnull(x) and str(x).strip() != '' else '無')
         df_chart['設備稼動率'] = df_chart['設備稼動效率(%)'].astype(str)
         df_chart['產品產出率'] = df_chart['產品產出率(%)'].astype(str)
         
+        # 🌟 --- 核心演算法：時間軸重疊自動分割 (Interval Splitting) ---
+        def split_overlapping_blocks(df):
+            if df.empty: return df
+            
+            # 定義哪些作業類型會「切斷」生產時間
+            interrupt_types = ['機台維修', '待料停機', '中午用餐', '設備蒸汽殺菌', '設備CIP清洗']
+            
+            # 將資料分為「底層主區塊」與「覆蓋層中斷區塊」
+            base_blocks = df[~df['作業類型'].isin(interrupt_types)].to_dict('records')
+            interrupt_blocks = df[df['作業類型'].isin(interrupt_types)].to_dict('records')
+            
+            new_records = []
+            
+            for base in base_blocks:
+                line = base['設備名稱']
+                start = base['Start']
+                end = base['Finish']
+                
+                # 找出同設備、且時間有交疊的中斷事件
+                overlaps = [i for i in interrupt_blocks if i['設備名稱'] == line and i['Start'] < end and i['Finish'] > start]
+                overlaps.sort(key=lambda x: x['Start']) # 依時間先後排序
+                
+                current_start = start
+                for overlap in overlaps:
+                    overlap_start = max(current_start, overlap['Start'])
+                    overlap_end = min(end, overlap['Finish'])
+                    
+                    # 如果中斷事件開始前還有一段時間，則建立「切斷前」的區塊
+                    if current_start < overlap_start:
+                        segment = base.copy()
+                        segment['Start'] = current_start
+                        segment['Finish'] = overlap_start
+                        new_records.append(segment)
+                    
+                    # 將起點移到中斷事件結束之後
+                    current_start = max(current_start, overlap_end)
+                
+                # 若所有中斷事件結束後，主區塊還有剩餘時間，則建立「切斷後」的區塊
+                if current_start < end:
+                    segment = base.copy()
+                    segment['Start'] = current_start
+                    segment['Finish'] = end
+                    new_records.append(segment)
+                    
+            # 將切割後的主區塊與原本的中斷區塊合併回來
+            return pd.DataFrame(new_records + interrupt_blocks)
+
+        # 套用分割函數
+        df_chart_split = split_overlapping_blocks(df_chart)
+
+        # 繪製甘特圖 (使用切割後的資料 df_chart_split)
         fig = px.timeline(
-            df_chart, 
+            df_chart_split, 
             x_start="Start", 
             x_end="Finish", 
             y="設備名稱", 
@@ -279,7 +326,7 @@ if not df_display.empty and len(df_display) > 0:
                 "Start": True,
                 "Finish": True,
                 "花費時間": True,
-                "產出量": True,      # 🌟 生產線顯示「瓶」，殺菌機顯示「L」
+                "產出量": True,      
                 "設備稼動率": True,  
                 "產品產出率": True,  
                 "備註說明": True, 
