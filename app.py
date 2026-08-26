@@ -401,6 +401,69 @@ if not df_display.empty and len(df_display) > 0:
         else:
             st.write("- ✅ **異常停機統計**：今日無記錄機台維修或待料停機狀況。")
 
+# (這裡接續原本異常停機統計的 if/else 判斷式結尾...)
+     
+        # 🌟 --- 新增：產品製程物料追蹤與損耗差異分析 (調配 ➔ 殺菌 ➔ 充填) ---
+        st.markdown("---")
+        st.markdown("#### 💧 產品製程物料追蹤與損耗差異分析 (調配 ➔ 殺菌 ➔ 充填)")
+        
+        # 找出當日有生產紀錄的所有產品 (排除非生產作業)
+        prod_records = df_display[df_display['作業類型'].isin(['產品生產', '產品殺菌作業'])]
+        unique_products = [p for p in prod_records['產品名稱'].unique() if str(p).strip() != "" and "非" not in str(p)]
+        
+        if unique_products:
+            for prod_name in unique_products:
+                p_data = df_display[df_display['產品名稱'] == prod_name].copy()
+                
+                # 確保數值轉換正常
+                p_data['調配生產噸數(T)'] = pd.to_numeric(p_data['調配生產噸數(T)'], errors='coerce').fillna(0)
+                p_data['實際生產數量(瓶)'] = pd.to_numeric(p_data['實際生產數量(瓶)'], errors='coerce').fillna(0)
+                p_data['單瓶容量(ml/g)'] = pd.to_numeric(p_data['單瓶容量(ml/g)'], errors='coerce').fillna(0)
+                p_data['殺菌後成品量(L)'] = pd.to_numeric(p_data['殺菌後成品量(L)'], errors='coerce').fillna(0)
+                
+                # 1. 取得生產線資料：計算總調配量與總充填量
+                line_data = p_data[(p_data['設備類別'] == '生產線') & (p_data['作業類型'] == '產品生產')]
+                # 噸(T) 轉換為 公升(L) -> 乘以 1000
+                total_batch_L = line_data['調配生產噸數(T)'].sum() * 1000
+                # 總充填量 (瓶數 * 單瓶容量) 轉換為 公升(L) -> 除以 1000
+                total_output_L = (line_data['實際生產數量(瓶)'] * line_data['單瓶容量(ml/g)']).sum() / 1000.0
+                
+                # 2. 取得殺菌機資料：計算殺菌總產出量
+                ster_data = p_data[(p_data['設備類別'] == '殺菌機') & (p_data['作業類型'] == '產品殺菌作業')]
+                total_sterilized_L = ster_data['殺菌後成品量(L)'].sum()
+                
+                # 只要該品項有任何數據，就顯示對應的儀表板
+                if total_batch_L > 0 or total_sterilized_L > 0 or total_output_L > 0:
+                    st.markdown(f"**📦 品項：{prod_name}**")
+                    col1, col2, col3 = st.columns(3)
+                    
+                    # 計算各階段差異 (負值代表發生損耗，正值代表計算誤差或增量)
+                    diff_batch_ster = total_sterilized_L - total_batch_L
+                    diff_ster_out = total_output_L - total_sterilized_L
+                    
+                    with col1:
+                        st.metric(label="1. 原料調配總量", value=f"{total_batch_L:,.1f} L")
+                    with col2:
+                        # 比較殺菌機與調配量的差異
+                        st.metric(
+                            label="2. 殺菌機總產出量", 
+                            value=f"{total_sterilized_L:,.1f} L", 
+                            delta=f"{diff_batch_ster:,.1f} L (與調配差值)",
+                            delta_color="normal"
+                        )
+                    with col3:
+                        # 比較實際充填與殺菌機的差異
+                        st.metric(
+                            label="3. 產線實際充填量", 
+                            value=f"{total_output_L:,.1f} L", 
+                            delta=f"{diff_ster_out:,.1f} L (與殺菌差值)",
+                            delta_color="normal"
+                        )
+                    st.write("") # 增加區塊間距
+                    
+        else:
+            st.info("今日尚無完整的產品生產與殺菌紀錄可供追蹤比對。")
+
     except Exception as e:
         st.warning(f"圖表繪製異常，請稍候再試。({e})")
 else:
