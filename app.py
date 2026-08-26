@@ -17,6 +17,7 @@ def init_connection():
         scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         client = gspread.authorize(creds)
+        # 🌟 請確認下方引號內的名稱，與您 Google 試算表的名稱完全一致！
         sheet = client.open("產線生產紀錄_DB").sheet1
         return sheet
     except Exception as e:
@@ -37,7 +38,6 @@ def fetch_data():
             if records:
                 return pd.DataFrame(records)
             else:
-                # 若試算表為空，回傳包含新擴充欄位的空表頭 (🌟 新增備註欄位)
                 return pd.DataFrame(columns=[
                     '日期', '產線', '作業類型', '產品名稱', 
                     '開始時間', '結束時間', '實際花費時間(H)', '實際生產數量(瓶)', 
@@ -61,7 +61,6 @@ st.sidebar.header("現場生產紀錄輸入")
 today = st.sidebar.date_input("紀錄日期", date.today())
 selected_line = st.sidebar.selectbox("生產線選擇", list(product_mapping.keys()))
 
-# 🌟 擴充作業類型選項
 task_type = st.sidebar.radio(
     "作業類型", 
     ["產品生產", "設備蒸汽殺菌", "設備CIP清洗", "機台維修", "待料停機", "中午用餐"]
@@ -77,7 +76,6 @@ st.sidebar.subheader("時間與產量設定")
 start_time = st.sidebar.time_input("開始時間 (首件/作業開始)")
 end_time = st.sidebar.time_input("結束時間 (末件/作業結束)")
 
-# 依據作業類型，決定是否顯示效能參數輸入框
 if task_type == "產品生產":
     bottle_count = st.sidebar.number_input("實際生產數量 (瓶)", min_value=0, value=5000, step=100)
     bottle_weight = st.sidebar.number_input("單瓶容量/重量 (ml/g)", min_value=0, value=946, step=1)
@@ -93,7 +91,6 @@ else:
     batch_tons = 0
 
 st.sidebar.markdown("---")
-# 🌟 新增備註輸入區
 remarks = st.sidebar.text_area("備註 (異常原因說明)", placeholder="若有異常、維修或特殊狀況，請簡述說明...")
 
 # --- 資料寫入與系統自動計算邏輯 ---
@@ -103,7 +100,6 @@ if st.sidebar.button("確認送出紀錄"):
     elif not db_connected:
         st.sidebar.error("資料庫未連線，無法寫入。")
     else:
-        # 計算實際花費時間
         t1 = datetime.combine(today, start_time)
         t2 = datetime.combine(today, end_time)
         actual_hours = (t2 - t1).total_seconds() / 3600
@@ -111,7 +107,6 @@ if st.sidebar.button("確認送出紀錄"):
         performance_rate = 0.0
         yield_rate = 0.0
         
-        # 只有在「產品生產」時才計算效能與產出率
         if task_type == "產品生產":
             if actual_hours > 0 and standard_rate > 0:
                 theoretical_output = standard_rate * actual_hours
@@ -121,7 +116,6 @@ if st.sidebar.button("確認送出紀錄"):
                 actual_tons_filled = (bottle_count * bottle_weight) / 1000000
                 yield_rate = (actual_tons_filled / batch_tons) * 100
         
-        # 準備寫入 Google 試算表的一列資料 (🌟 寫入備註內容)
         new_row = [
             today.strftime("%Y-%m-%d"), 
             selected_line, 
@@ -139,7 +133,6 @@ if st.sidebar.button("確認送出紀錄"):
             remarks  
         ]
         
-        # 執行寫入
         try:
             sheet.append_row(new_row)
             st.sidebar.success(f"成功寫入雲端資料庫！")
@@ -169,7 +162,6 @@ if not df_display.empty and len(df_display) > 0:
             lambda x: x['產品名稱'] if x['作業類型'] == '產品生產' else x['作業類型'], axis=1
         )
         
-        # 🌟 新增：時間格式自動轉換公式 (將 4.6 轉為 4 小時 36 分鐘)
         def format_duration(h):
             try:
                 h_float = float(h)
@@ -185,7 +177,6 @@ if not df_display.empty and len(df_display) > 0:
             except:
                 return str(h)
 
-        # 套用轉換公式
         df_chart['花費時間'] = df_chart['實際花費時間(H)'].apply(format_duration)
         
         df_chart['產量'] = df_chart.apply(
@@ -193,7 +184,6 @@ if not df_display.empty and len(df_display) > 0:
         )
         
         df_chart['備註說明'] = df_chart['備註'].apply(lambda x: x if pd.notnull(x) and str(x).strip() != '' else '無')
-        
         df_chart['設備稼動率'] = df_chart['設備稼動效率(%)'].astype(str)
         df_chart['產品產出率'] = df_chart['產品產出率(%)'].astype(str)
         
@@ -231,19 +221,73 @@ if not df_display.empty and len(df_display) > 0:
         
         fig.update_traces(textposition='inside', insidetextanchor='middle')
         
+        # 🌟 隱藏舊圖例，縮小下方邊距
         fig.update_layout(
-            legend_title_text="作業項目",
-            legend=dict(
-                orientation="h", 
-                yanchor="top",
-                y=-0.2,          
-                xanchor="center",
-                x=0.5
-            ),
-            margin=dict(t=50, b=80, l=50, r=50)
+            showlegend=False,
+            margin=dict(t=50, b=20, l=50, r=50)
         )
         
         st.plotly_chart(fig, use_container_width=True)
+        
+        # 🌟 --- 系統自動化分析報告與各線稼動率看板 ---
+        st.markdown(f"### 📊 {selected_date_str} 產線整體效能與分析報告")
+        
+        prod_df = df_display[df_display['作業類型'] == '產品生產'].copy()
+        
+        if not prod_df.empty:
+            # 將欄位轉換為數值以便計算
+            prod_df['實際生產數量(瓶)'] = pd.to_numeric(prod_df['實際生產數量(瓶)'], errors='coerce').fillna(0)
+            prod_df['實際花費時間(H)'] = pd.to_numeric(prod_df['實際花費時間(H)'], errors='coerce').fillna(0)
+            prod_df['設備標準產能(瓶/H)'] = pd.to_numeric(prod_df['設備標準產能(瓶/H)'], errors='coerce').fillna(0)
+            
+            # 計算當日各批次的理論最大產量 (標準產能 × 實際小時)
+            prod_df['理論最大產量'] = prod_df['設備標準產能(瓶/H)'] * prod_df['實際花費時間(H)']
+            
+            # 建立多個並排的數據看板 (依據產線數量自動切割欄位)
+            cols = st.columns(len(product_mapping.keys()))
+            perf_dict = {}
+            
+            for idx, line in enumerate(product_mapping.keys()):
+                line_data = prod_df[prod_df['產線'] == line]
+                with cols[idx]:
+                    if not line_data.empty and line_data['理論最大產量'].sum() > 0:
+                        total_actual = line_data['實際生產數量(瓶)'].sum()
+                        total_theory = line_data['理論最大產量'].sum()
+                        # 計算該產線整日的平均稼動率
+                        line_perf = (total_actual / total_theory) * 100
+                        perf_dict[line] = line_perf
+                        st.metric(label=f"🟢 {line} 產線總稼動率", value=f"{line_perf:.1f}%")
+                    else:
+                        st.metric(label=f"⚪ {line} 產線總稼動率", value="無生產紀錄")
+            
+            # 產生規則式自動化分析摘要文字
+            st.markdown("**💡 系統自動分析摘要：**")
+            
+            if perf_dict:
+                # 找出表現最佳的產線
+                best_line = max(perf_dict, key=perf_dict.get)
+                st.write(f"- 🏆 **本日表現最佳產線**：**{best_line}**，綜合稼動率達 **{perf_dict[best_line]:.1f}%**。")
+                
+                # 找出表現偏低的產線 (設定標準為 80%)
+                low_perf_lines = [line for line, perf in perf_dict.items() if perf < 80]
+                if low_perf_lines:
+                    st.warning(f"- ⚠️ **效能偏低提醒**：產線 **{', '.join(low_perf_lines)}** 今日總稼動率低於 80%，建議檢視表格內的【異常備註】了解是否有待料或設備故障狀況。")
+                else:
+                    st.success("- ✨ **整體產能狀況良好**：今日有生產的產線，總稼動率均維持在 80% 以上。")
+                    
+            # 統計異常與維修時間
+            abnormal_df = df_display[df_display['作業類型'].isin(['機台維修', '待料停機'])]
+            if not abnormal_df.empty:
+                abnormal_df['實際花費時間(H)'] = pd.to_numeric(abnormal_df['實際花費時間(H)'], errors='coerce').fillna(0)
+                total_abnormal_hours = abnormal_df['實際花費時間(H)'].sum()
+                st.error(f"- 🛠️ **異常停機統計**：今日記錄到機台維修/待料停機，共計影響生產約 **{total_abnormal_hours:.1f} 小時**。")
+            else:
+                st.write("- ✅ **異常停機統計**：今日無記錄機台維修或待料停機狀況。")
+                
+        else:
+            st.info("尚無產品生產紀錄，無法計算稼動率與產生報告。")
+        # -----------------------------------------------------------
+
     except Exception as e:
         st.warning(f"圖表繪製異常，請稍候再試。({e})")
 else:
