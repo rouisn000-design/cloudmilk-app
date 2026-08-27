@@ -97,7 +97,7 @@ if equip_type == "殺菌機":
     selected_equip = st.sidebar.selectbox("殺菌機選擇", STERILIZERS)
     task_type = st.sidebar.radio(
         "作業類型", 
-        ["產品殺菌作業", "設備蒸汽殺菌", "設備CIP清洗", "機台維修", "待料停機", "中午用餐"]
+        ["產品殺菌作業", "設備殺菌", "設備CIP清洗", "機台維修", "待料停機", "中午用餐"]
     )
     
     if task_type == "產品殺菌作業":
@@ -120,7 +120,7 @@ elif equip_type == "生產線":
     selected_equip = st.sidebar.selectbox("生產線選擇", LINES)
     task_type = st.sidebar.radio(
         "作業類型", 
-        ["產品生產", "設備蒸汽殺菌", "設備CIP清洗", "機台維修", "待料停機", "中午用餐"]
+        ["產品生產", "設備蒸汽殺菌", "設備CIP清洗", "機台維修", "換線作業停機1837-946", "待料停機", "中午用餐"]
     )
     is_production = (task_type == "產品生產")
 
