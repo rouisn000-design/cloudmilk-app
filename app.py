@@ -65,12 +65,12 @@ LINES = ["TR/G7", "TR/7", "PE", "PP"]
 EQUIPMENT_ORDER = STERILIZERS + LINES
 
 PRODUCTS = [
-    "台牧-生乳", "雲乳-純濃鮮乳", "台牧-茶の魔手專用", 
+    "台牧-生乳", "台牧-A2β生乳", "雲乳-純濃鮮乳", "台牧-茶の魔手專用", 
     "元初-高蛋白濃豆乳", "有飲-開心果四季春奶茶", "全家-抹茶牛乳", "全家-紅茶牛乳",
     "台牧-六甲田莊鮮乳", "台牧-六甲田莊極選A2β鮮乳", "台牧-六甲雙韻茶牛乳", "台牧-六甲純培咖啡牛乳",
     "翔本-特濃厚牛乳", "茗登-提茉西特濃牛乳", "AGV-鮮採梅番茄900", "AGV-梅子番茄400",
     "匯紘-阿薩姆奶茶", "匯紘-阿薩姆青森蘋果奶茶", "匯紘-阿薩姆雙茶會烏龍奶茶",
-    "英泉-全脂牛乳 1837", "英泉-全脂牛乳 946", "牛奶本味", "抹茶本位", "奶茶本位", "果汁牛乳",
+    "英泉-全脂牛乳 1837", "英泉-全脂牛乳 946", "牛奶本味", "抹茶本位", "奶茶本位", "芝麻本位", "果汁牛乳",
     "台牧-六甲田莊巧克力牛乳乳飲品", "台牧-六甲田莊咖啡牛乳乳飲品",
     "AGV-寒天檸檬", "AGV-寒天百香", "AGV-寒天仙草", "AGV-番茄蜂蜜綜合蔬菜汁",
     "英泉-巧克力", "英泉-麥芽", "英泉-蘋果", "英泉-草莓", "英泉-優酪乳乳酸飲料", "英泉-蔓越莓乳酸飲料",
@@ -95,6 +95,7 @@ yield_rate = 0.0
 
 if equip_type == "殺菌機":
     selected_equip = st.sidebar.selectbox("殺菌機選擇", STERILIZERS)
+    # 🌟 新增換線選項
     task_type = st.sidebar.radio(
         "作業類型", 
         ["產品殺菌作業", "設備殺菌", "設備CIP清洗", "機台維修", "待料停機", "中午用餐"]
@@ -118,9 +119,10 @@ if equip_type == "殺菌機":
 
 elif equip_type == "生產線":
     selected_equip = st.sidebar.selectbox("生產線選擇", LINES)
+    # 🌟 新增換線選項
     task_type = st.sidebar.radio(
         "作業類型", 
-        ["產品生產", "設備蒸汽殺菌", "設備CIP清洗", "機台維修", "換線作業停機1837-946", "待料停機", "中午用餐"]
+        ["產品生產", "設備蒸汽殺菌", "設備CIP清洗", "機台維修", "換線作業停機 1837-946", "待料停機", "中午用餐"]
     )
     is_production = (task_type == "產品生產")
 
@@ -211,7 +213,6 @@ selected_date_str = today.strftime("%Y-%m-%d")
 if not df.empty and '日期' in df.columns:
     df_display = df[df['日期'] == selected_date_str].copy()
     
-    # 🌟 修復對應欄位名稱
     expected_cols = [
         '調配(生產)噸數(T)', '實際生產數量(瓶)', '單瓶容量(ml/g)', 
         '殺菌後成品量(L)', '實際花費時間(H)', '設備標準產能(瓶/H)'
@@ -247,6 +248,10 @@ if not df_display.empty and len(df_display) > 0:
             lambda x: x['產品名稱'] if x['作業類型'] in ['產品生產', '產品殺菌作業'] else x['作業類型'], axis=1
         )
         
+        df_chart['狀態分組'] = df_chart['作業類型'].apply(
+            lambda x: '正常生產 / 殺菌' if x in ['產品生產', '產品殺菌作業'] else x
+        )
+        
         def format_duration(h):
             try:
                 h_float = float(h)
@@ -278,7 +283,8 @@ if not df_display.empty and len(df_display) > 0:
         
         def split_overlapping_blocks(df):
             if df.empty: return df
-            interrupt_types = ['機台維修', '待料停機', '中午用餐', '設備蒸汽殺菌', '設備CIP清洗']
+            # 🌟 新增換線作業停機到中斷事件名單中
+            interrupt_types = ['機台維修', '換線作業停機 1837-946', '待料停機', '中午用餐', '設備蒸汽殺菌', '設備CIP清洗']
             base_blocks = df[~df['作業類型'].isin(interrupt_types)].to_dict('records')
             interrupt_blocks = df[df['作業類型'].isin(interrupt_types)].to_dict('records')
             new_records = []
@@ -313,15 +319,28 @@ if not df_display.empty and len(df_display) > 0:
 
         df_chart_split = split_overlapping_blocks(df_chart)
 
+        # 🌟 為換線作業新增專屬的紫色
+        status_colors = {
+            '正常生產 / 殺菌': '#4A90E2', # 藍色 
+            '設備蒸汽殺菌': '#F5A623',   # 橘色 
+            '設備CIP清洗': '#7ED321',   # 綠色 
+            '機台維修': '#D0021B',     # 紅色 
+            '換線作業停機 1837-946': '#BD10E0', # 紫色 (換線專用色)
+            '待料停機': '#9B9B9B',     # 灰色 
+            '中午用餐': '#F8E71C'      # 黃色 
+        }
+
         fig = px.timeline(
             df_chart_split, 
             x_start="Start", 
             x_end="Finish", 
             y="設備名稱", 
-            color="顯示標籤",
+            color="狀態分組",           
+            color_discrete_map=status_colors, 
             text="顯示標籤", 
             hover_name="顯示標籤",
             hover_data={
+                "狀態分組": False,      
                 "顯示標籤": False, 
                 "Start": True,
                 "Finish": True,
@@ -350,9 +369,18 @@ if not df_display.empty and len(df_display) > 0:
         )
         
         fig.update_traces(textposition='inside', insidetextanchor='middle')
+        
         fig.update_layout(
-            showlegend=False,
-            margin=dict(t=50, b=20, l=50, r=50)
+            showlegend=True,
+            legend=dict(
+                orientation="h",
+                yanchor="top",
+                y=-0.2, 
+                xanchor="center",
+                x=0.5,
+                title="" 
+            ),
+            margin=dict(t=50, b=80, l=50, r=50) 
         )
         
         st.plotly_chart(fig, use_container_width=True)
@@ -405,13 +433,14 @@ if not df_display.empty and len(df_display) > 0:
             else:
                 st.success("- ✨ **整體產能狀況良好**：今日有生產的產線，總稼動率均維持在 80% 以上。")
                 
-        abnormal_df = df_display[df_display['作業類型'].isin(['機台維修', '待料停機'])]
+        # 🌟 將換線作業也納入異常停機總工時計算，讓您掌握非生產的時間成本
+        abnormal_df = df_display[df_display['作業類型'].isin(['機台維修', '待料停機', '換線作業停機 1837-946'])]
         if not abnormal_df.empty:
             abnormal_df['實際花費時間(H)'] = pd.to_numeric(abnormal_df['實際花費時間(H)'], errors='coerce').fillna(0)
             total_abnormal_hours = abnormal_df['實際花費時間(H)'].sum()
-            st.error(f"- 🛠️ **異常停機統計**：今日記錄到機台維修/待料停機，共計影響約 **{total_abnormal_hours:.1f} 小時**。")
+            st.error(f"- 🛠️ **停機與異常統計**：今日記錄到換線/維修/待料停機，共計佔用產線約 **{total_abnormal_hours:.1f} 小時**。")
         else:
-            st.write("- ✅ **異常停機統計**：今日無記錄機台維修或待料停機狀況。")
+            st.write("- ✅ **停機與異常統計**：今日無記錄換線、機台維修或待料停機狀況。")
             
         # 🌟 --- 新增：物料追蹤與差異分析 (調配 ➔ 殺菌 ➔ 充填) ---
         st.markdown("---")
@@ -450,7 +479,6 @@ if not df_display.empty and len(df_display) > 0:
                                        (df_display['作業類型'] == '產品生產') & 
                                        (df_display['產品名稱'].isin(target_prod_names))].copy()
                 
-                # 🌟 確保轉換精確對應試算表欄位名稱
                 line_data['調配(生產)噸數(T)'] = pd.to_numeric(line_data['調配(生產)噸數(T)'], errors='coerce').fillna(0)
                 line_data['實際生產數量(瓶)'] = pd.to_numeric(line_data['實際生產數量(瓶)'], errors='coerce').fillna(0)
                 line_data['單瓶容量(ml/g)'] = pd.to_numeric(line_data['單瓶容量(ml/g)'], errors='coerce').fillna(0)
