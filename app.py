@@ -321,7 +321,7 @@ if not df_display.empty and len(df_display) > 0:
 
         # 🌟 為換線作業新增專屬的紫色
         status_colors = {
-            '正常生產 / 殺菌':'#F8E71C'      # 黃色 
+            '正常生產 / 殺菌': '#F8E71C'      # 黃色 
             '設備蒸汽殺菌': '#F5A623',   # 橘色 
             '設備CIP清洗': '#7ED321',   # 綠色 
             '機台維修': '#D0021B',     # 紅色 
