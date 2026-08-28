@@ -95,7 +95,6 @@ yield_rate = 0.0
 
 if equip_type == "殺菌機":
     selected_equip = st.sidebar.selectbox("殺菌機選擇", STERILIZERS)
-    # 🌟 新增換線選項
     task_type = st.sidebar.radio(
         "作業類型", 
         ["產品殺菌作業", "設備殺菌", "設備CIP清洗", "機台維修", "待料停機", "中午用餐"]
@@ -119,7 +118,6 @@ if equip_type == "殺菌機":
 
 elif equip_type == "生產線":
     selected_equip = st.sidebar.selectbox("生產線選擇", LINES)
-    # 🌟 新增換線選項
     task_type = st.sidebar.radio(
         "作業類型", 
         ["產品生產", "設備蒸汽殺菌", "設備CIP清洗", "機台維修", "換線作業停機 1837-946", "待料停機", "中午用餐"]
@@ -283,7 +281,6 @@ if not df_display.empty and len(df_display) > 0:
         
         def split_overlapping_blocks(df):
             if df.empty: return df
-            # 🌟 新增換線作業停機到中斷事件名單中
             interrupt_types = ['機台維修', '換線作業停機 1837-946', '待料停機', '中午用餐', '設備蒸汽殺菌', '設備CIP清洗']
             base_blocks = df[~df['作業類型'].isin(interrupt_types)].to_dict('records')
             interrupt_blocks = df[df['作業類型'].isin(interrupt_types)].to_dict('records')
@@ -319,15 +316,15 @@ if not df_display.empty and len(df_display) > 0:
 
         df_chart_split = split_overlapping_blocks(df_chart)
 
-        # 🌟 為換線作業新增專屬的紫色
+        # 🌟 顏色設定更新：正常生產(黃色)，中午用餐(藍色)
         status_colors = {
-            '正常生產 / 殺菌': '#4A90E2', # 藍色 
+            '正常生產 / 殺菌': '#F8E71C', # 黃色
             '設備蒸汽殺菌': '#F5A623',   # 橘色 
             '設備CIP清洗': '#7ED321',   # 綠色 
             '機台維修': '#D0021B',     # 紅色 
-            '換線作業停機 1837-946': '#BD10E0', # 紫色 (換線專用色)
+            '換線作業停機 1837-946': '#BD10E0', # 紫色
             '待料停機': '#9B9B9B',     # 灰色 
-            '中午用餐': '#F8E71C'      # 黃色 
+            '中午用餐': '#4A90E2'      # 藍色
         }
 
         fig = px.timeline(
@@ -433,7 +430,6 @@ if not df_display.empty and len(df_display) > 0:
             else:
                 st.success("- ✨ **整體產能狀況良好**：今日有生產的產線，總稼動率均維持在 80% 以上。")
                 
-        # 🌟 將換線作業也納入異常停機總工時計算，讓您掌握非生產的時間成本
         abnormal_df = df_display[df_display['作業類型'].isin(['機台維修', '待料停機', '換線作業停機 1837-946'])]
         if not abnormal_df.empty:
             abnormal_df['實際花費時間(H)'] = pd.to_numeric(abnormal_df['實際花費時間(H)'], errors='coerce').fillna(0)
