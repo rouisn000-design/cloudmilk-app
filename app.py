@@ -105,7 +105,7 @@ with tab_input:
         selected_equip = st.selectbox("殺菌機選擇", STERILIZERS)
         task_type = st.radio(
             "作業類型", 
-            ["產品殺菌作業", "設備殺菌", "設備CIP清洗", "機台維修", "換線作業停機 1837-946", "待料停機", "中午用餐"]
+            ["產品殺菌作業", "設備蒸汽殺菌", "設備CIP清洗", "機台維修", "換線作業停機 1837-946", "待料停機", "中午用餐"]
         )
         
         if task_type == "產品殺菌作業":
@@ -115,7 +115,7 @@ with tab_input:
         
         st.markdown("---")
         st.subheader("時間與參數設定")
-        col1, col2 = st.columns(2) # 手機版自動垂直排列，電腦版並排
+        col1, col2 = st.columns(2)
         with col1:
             start_time = st.time_input("開始時間 (作業開始)", step=1)
         with col2:
@@ -131,7 +131,7 @@ with tab_input:
         selected_equip = st.selectbox("生產線選擇", LINES)
         task_type = st.radio(
             "作業類型", 
-            ["產品生產", "設備殺菌", "設備CIP清洗", "機台維修", "換線作業停機 1837-946", "待料停機", "中午用餐"]
+            ["產品生產", "設備蒸汽殺菌", "設備CIP清洗", "機台維修", "換線作業停機 1837-946", "待料停機", "中午用餐"]
         )
         is_production = (task_type == "產品生產")
 
@@ -343,7 +343,7 @@ with tab_dashboard:
 
             status_colors = {
                 '正常生產 / 殺菌': '#F8E71C', # 黃色
-                '設備殺菌': '#F5A623',   # 橘色 
+                '設備蒸汽殺菌': '#F5A623',   # 橘色 
                 '設備CIP清洗': '#7ED321',   # 綠色 
                 '機台維修': '#D0021B',     # 紅色 
                 '換線作業停機 1837-946': '#BD10E0', # 紫色
@@ -466,9 +466,11 @@ with tab_dashboard:
             st.markdown("---")
             st.markdown("#### 💧 產品製程物料追蹤與損耗差異分析 (調配 ➔ 殺菌 ➔ 充填)")
             
-            RAW_TO_FINAL_MAP = {
-
-            }
+            # 🌟 防呆寫法：直接宣告字典並賦值，徹底避免縮排解析錯誤
+            RAW_TO_FINAL_MAP = dict()
+            RAW_TO_FINAL_MAP["台牧-生乳"] = ["雲乳-純濃鮮乳", "台牧-茶の魔手專用", "台牧-六甲田莊鮮乳"]
+            RAW_TO_FINAL_MAP["英泉-全脂牛乳---殺菌"] = ["英泉-全脂牛乳 1837", "英泉-全脂牛乳 946"]
+            RAW_TO_FINAL_MAP["AGV-梅子番茄---殺菌"] = ["AGV-鮮採梅番茄900", "AGV-梅子番茄400"]
             
             FINAL_TO_RAW_MAP = {}
             for raw, finals in RAW_TO_FINAL_MAP.items():
@@ -476,9 +478,7 @@ with tab_dashboard:
                     FINAL_TO_RAW_MAP[f] = raw
                     
             prod_records = df_display[df_display['作業類型'].isin(['產品生產', '產品殺菌作業'])]
-            "台牧-生乳": ["雲乳-純濃鮮乳", "台牧-茶の魔手專用", "台牧-六甲田莊鮮乳"],
-            "英泉-全脂牛乳---殺菌": ["英泉-全脂牛乳 1837", "英泉-全脂牛乳 946"],
-            "AGV-梅子番茄---殺菌": ["AGV-鮮採梅番茄900", "AGV-梅子番茄400"]
+            
             unique_raw_groups = set()
             for p in prod_records['產品名稱'].unique():
                 if str(p).strip() != "" and "非" not in str(p):
