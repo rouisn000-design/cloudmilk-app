@@ -391,6 +391,7 @@ with tab_dashboard:
             
             fig.update_traces(textposition='inside', insidetextanchor='middle')
             
+            # 🌟 核心修改區：賦予圖表超大寬度 (2500像素)，強制展開時間軸
             fig.update_layout(
                 showlegend=True,
                 legend=dict(
@@ -401,10 +402,12 @@ with tab_dashboard:
                     x=0.5,
                     title="" 
                 ),
-                margin=dict(t=50, b=80, l=50, r=50) 
+                margin=dict(t=50, b=80, l=50, r=50),
+                width=2500  # <--- 強制設定寬度為 2500 像素
             )
             
-            st.plotly_chart(fig, use_container_width=True)
+            # 🌟 關閉 use_container_width，讓超出螢幕的圖表自動出現水平捲軸
+            st.plotly_chart(fig, use_container_width=False)
             
             # --- 系統自動化分析報告與各線稼動率看板 ---
             st.markdown(f"### 📊 {selected_date_str} 各產線整體效能與分析報告")
@@ -466,7 +469,6 @@ with tab_dashboard:
             st.markdown("---")
             st.markdown("#### 💧 產品製程物料追蹤與損耗差異分析 (調配 ➔ 殺菌 ➔ 充填)")
             
-            # 🌟 防呆寫法：直接宣告字典並賦值，徹底避免縮排解析錯誤
             RAW_TO_FINAL_MAP = dict()
             RAW_TO_FINAL_MAP["台牧-生乳---殺菌"] = ["雲乳-純濃鮮乳", "台牧-茶の魔手專用", "台牧-六甲田莊鮮乳"]
             RAW_TO_FINAL_MAP["英泉-全脂牛乳---殺菌"] = ["英泉-全脂牛乳 1837", "英泉-全脂牛乳 946"]
