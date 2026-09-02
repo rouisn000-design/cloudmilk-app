@@ -391,7 +391,7 @@ with tab_dashboard:
             
             fig.update_traces(textposition='inside', insidetextanchor='middle')
             
-            # 🌟 核心修改區：賦予圖表超大寬度 (2500像素)，強制展開時間軸
+            # 🌟 核心修改區：賦予圖表超大寬度 (5000像素)，強制展開時間軸確保文字清晰
             fig.update_layout(
                 showlegend=True,
                 legend=dict(
@@ -403,10 +403,9 @@ with tab_dashboard:
                     title="" 
                 ),
                 margin=dict(t=50, b=80, l=50, r=50),
-                width=2500  # <--- 強制設定寬度為 2500 像素
+                width=5000  # <--- 將寬度提升到 5000，確保初次畫面約顯示 4 小時
             )
             
-            # 🌟 關閉 use_container_width，讓超出螢幕的圖表自動出現水平捲軸
             st.plotly_chart(fig, use_container_width=False)
             
             # --- 系統自動化分析報告與各線稼動率看板 ---
