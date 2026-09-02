@@ -83,7 +83,7 @@ PRODUCTS = [
 tab_input, tab_dashboard = st.tabs(["📝 現場紀錄輸入區", "📊 產線戰情可視化"])
 
 # ==========================================
-# 分頁 1：現場紀錄輸入區 (全螢幕寬度)
+# 分頁 1：現場紀錄輸入區
 # ==========================================
 with tab_input:
     st.header("現場生產紀錄輸入")
@@ -226,7 +226,7 @@ with tab_input:
                 st.error(f"寫入失敗: {e}")
 
 # ==========================================
-# 分頁 2：戰情看板與分析 (全螢幕寬度)
+# 分頁 2：戰情看板與分析
 # ==========================================
 with tab_dashboard:
     df = fetch_data()
@@ -342,13 +342,13 @@ with tab_dashboard:
             df_chart_split = split_overlapping_blocks(df_chart)
 
             status_colors = {
-                '正常生產 / 殺菌': '#F8E71C', # 黃色
-                '設備殺菌': '#F5A623',   # 橘色 
-                '設備CIP清洗': '#7ED321',   # 綠色 
-                '機台維修': '#D0021B',     # 紅色 
-                '換線作業停機 1837-946': '#BD10E0', # 紫色
-                '待料停機': '#9B9B9B',     # 灰色 
-                '中午用餐': '#4A90E2'      # 藍色
+                '正常生產 / 殺菌': '#F8E71C', 
+                '設備殺菌': '#F5A623',   
+                '設備CIP清洗': '#7ED321',   
+                '機台維修': '#D0021B',     
+                '換線作業停機 1837-946': '#BD10E0', 
+                '待料停機': '#9B9B9B',     
+                '中午用餐': '#4A90E2'      
             }
 
             fig = px.timeline(
@@ -376,22 +376,27 @@ with tab_dashboard:
                 height=480 
             )
             
+            # 🌟 鎖定 Y 軸，不讓圖表自動縮放
             fig.update_yaxes(
                 categoryorder="array",
                 categoryarray=list(reversed(EQUIPMENT_ORDER)),
-                title_text=""
+                title_text="",
+                fixedrange=True,   
+                automargin=True    
             ) 
             
+            # 🌟 鎖定 X 軸，徹底關閉在圖表內亂放大的問題
             fig.update_xaxes(
                 title_text="",
                 tickformat="%H:%M:%S",  
                 dtick=3600000,       
-                tickangle=45
+                tickangle=45,
+                fixedrange=True    
             )
             
             fig.update_traces(textposition='inside', insidetextanchor='middle')
             
-            # 🌟 核心修改區：賦予圖表超大寬度 (5000像素)，強制展開時間軸確保文字清晰
+            # 🌟 優化排版：左邊距縮小(l=10)、寬度適中(2200)、關閉拖曳功能(dragmode=False)
             fig.update_layout(
                 showlegend=True,
                 legend=dict(
@@ -402,11 +407,13 @@ with tab_dashboard:
                     x=0.5,
                     title="" 
                 ),
-                margin=dict(t=50, b=80, l=50, r=50),
-                width=5000  # <--- 將寬度提升到 5000，確保初次畫面約顯示 4 小時
+                margin=dict(t=50, b=80, l=10, r=50), 
+                width=2200,      
+                dragmode=False   
             )
             
-            st.plotly_chart(fig, use_container_width=False)
+            # 🌟 隱藏 Plotly 工具列
+            st.plotly_chart(fig, use_container_width=False, config={'displayModeBar': False})
             
             # --- 系統自動化分析報告與各線稼動率看板 ---
             st.markdown(f"### 📊 {selected_date_str} 各產線整體效能與分析報告")
