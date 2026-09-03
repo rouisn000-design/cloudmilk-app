@@ -105,7 +105,7 @@ with tab_input:
         selected_equip = st.selectbox("殺菌機選擇", STERILIZERS)
         task_type = st.radio(
             "作業類型", 
-            ["產品殺菌作業", "設備殺菌", "設備CIP清洗", "機台維修", "換線作業停機 1837-946", "待料停機", "中午用餐"]
+            ["產品殺菌作業", "設備殺菌", "設備CIP清洗", "機台維修",  "待料停機", "中午用餐"]
         )
         
         if task_type == "產品殺菌作業":
@@ -129,11 +129,13 @@ with tab_input:
 
     elif equip_type == "生產線":
         selected_equip = st.selectbox("生產線選擇", LINES)
+        # 🌟 增加 滅菌釜---產品殺菌 選項
         task_type = st.radio(
             "作業類型", 
-            ["產品生產", "設備殺菌", "設備CIP清洗", "機台維修", "換線作業停機 1837-946", "待料停機", "中午用餐"]
+            ["產品生產", "設備殺菌", "設備CIP清洗", "機台維修", "換線作業停機 1837-946", "待料停機", "中午用餐", "滅菌釜---產品殺菌"]
         )
-        is_production = (task_type == "產品生產")
+        # 🌟 將滅菌釜作業也視同產品生產，要求輸入產出量
+        is_production = (task_type in ["產品生產", "滅菌釜---產品殺菌"])
 
         if is_production:
             selected_product = st.selectbox("產品名稱", PRODUCTS)
@@ -188,7 +190,7 @@ with tab_input:
                     capacity_per_second = standard_rate / 3600.0
                     sterilized_volume = total_seconds * capacity_per_second
 
-            if equip_type == "生產線" and task_type == "產品生產":
+            if equip_type == "生產線" and task_type in ["產品生產", "滅菌釜---產品殺菌"]:
                 if actual_hours > 0 and standard_rate > 0:
                     theoretical_output = standard_rate * actual_hours
                     performance_rate = (bottle_count / theoretical_output) * 100
@@ -208,12 +210,12 @@ with tab_input:
                 start_time.strftime(time_format), 
                 end_time.strftime(time_format),
                 round(actual_hours, 4), 
-                bottle_count if equip_type == "生產線" else "-", 
-                bottle_weight if equip_type == "生產線" and task_type == "產品生產" else "-",
-                round(batch_tons, 2) if equip_type == "生產線" and task_type == "產品生產" else "-",
+                bottle_count if equip_type == "生產線" and task_type in ["產品生產", "滅菌釜---產品殺菌"] else "-", 
+                bottle_weight if equip_type == "生產線" and task_type in ["產品生產", "滅菌釜---產品殺菌"] else "-",
+                round(batch_tons, 2) if equip_type == "生產線" and task_type in ["產品生產", "滅菌釜---產品殺菌"] else "-",
                 standard_rate, 
-                f"{round(performance_rate, 1)}%" if equip_type == "生產線" and task_type == "產品生產" else "-",
-                f"{round(yield_rate, 1)}%" if equip_type == "生產線" and task_type == "產品生產" else "-",
+                f"{round(performance_rate, 1)}%" if equip_type == "生產線" and task_type in ["產品生產", "滅菌釜---產品殺菌"] else "-",
+                f"{round(yield_rate, 1)}%" if equip_type == "生產線" and task_type in ["產品生產", "滅菌釜---產品殺菌"] else "-",
                 round(sterilized_volume, 2) if equip_type == "殺菌機" and task_type == "產品殺菌作業" else "-", 
                 remarks  
             ]
@@ -267,12 +269,14 @@ with tab_dashboard:
             df_chart['Start'] = pd.to_datetime(df_chart['日期'].astype(str) + ' ' + df_chart['開始時間'].astype(str))
             df_chart['Finish'] = pd.to_datetime(df_chart['日期'].astype(str) + ' ' + df_chart['結束時間'].astype(str))
             
+            # 🌟 圖表標籤：滅菌釜作業也會顯示產品名稱
             df_chart['顯示標籤'] = df_chart.apply(
-                lambda x: x['產品名稱'] if x['作業類型'] in ['產品生產', '產品殺菌作業'] else x['作業類型'], axis=1
+                lambda x: x['產品名稱'] if x['作業類型'] in ['產品生產', '產品殺菌作業', '滅菌釜---產品殺菌'] else x['作業類型'], axis=1
             )
             
+            # 🌟 狀態分組：統一編入「正常生產 / 殺菌」
             df_chart['狀態分組'] = df_chart['作業類型'].apply(
-                lambda x: '正常生產 / 殺菌' if x in ['產品生產', '產品殺菌作業'] else x
+                lambda x: '正常生產 / 殺菌' if x in ['產品生產', '產品殺菌作業', '滅菌釜---產品殺菌'] else x
             )
             
             def format_duration(h):
@@ -292,7 +296,7 @@ with tab_dashboard:
             df_chart['花費時間'] = df_chart['實際花費時間(H)'].apply(format_duration)
             
             def get_production_info(row):
-                if row['作業類型'] == '產品生產':
+                if row['作業類型'] in ['產品生產', '滅菌釜---產品殺菌']:
                     return f"{row['實際生產數量(瓶)']} 瓶"
                 elif row['作業類型'] == '產品殺菌作業':
                     volume = row.get('殺菌後成品量(L)', "-")
@@ -306,7 +310,7 @@ with tab_dashboard:
             
             def split_overlapping_blocks(df):
                 if df.empty: return df
-                interrupt_types = ['機台維修', '換線作業停機 1837-946', '待料停機', '中午用餐', '設備蒸汽殺菌', '設備CIP清洗']
+                interrupt_types = ['機台維修', '換線作業停機 1837-946', '待料停機', '中午用餐', '設備殺菌', '設備CIP清洗']
                 base_blocks = df[~df['作業類型'].isin(interrupt_types)].to_dict('records')
                 interrupt_blocks = df[df['作業類型'].isin(interrupt_types)].to_dict('records')
                 new_records = []
@@ -376,7 +380,6 @@ with tab_dashboard:
                 height=480 
             )
             
-            # 🌟 鎖定 Y 軸，不讓圖表自動縮放
             fig.update_yaxes(
                 categoryorder="array",
                 categoryarray=list(reversed(EQUIPMENT_ORDER)),
@@ -385,7 +388,6 @@ with tab_dashboard:
                 automargin=True    
             ) 
             
-            # 🌟 鎖定 X 軸，徹底關閉在圖表內亂放大的問題
             fig.update_xaxes(
                 title_text="",
                 tickformat="%H:%M:%S",  
@@ -396,7 +398,6 @@ with tab_dashboard:
             
             fig.update_traces(textposition='inside', insidetextanchor='middle')
             
-            # 🌟 優化排版：左邊距縮小(l=10)、寬度適中(2200)、關閉拖曳功能(dragmode=False)
             fig.update_layout(
                 showlegend=True,
                 legend=dict(
@@ -412,7 +413,6 @@ with tab_dashboard:
                 dragmode=False   
             )
             
-            # 🌟 隱藏 Plotly 工具列
             st.plotly_chart(fig, use_container_width=False, config={'displayModeBar': False})
             
             # --- 系統自動化分析報告與各線稼動率看板 ---
@@ -431,7 +431,8 @@ with tab_dashboard:
             for idx, line in enumerate(LINES):
                 with cols[idx]:
                     line_data = df_display[df_display['設備名稱'] == line]
-                    prod_data = line_data[line_data['作業類型'] == '產品生產']
+                    # 🌟 效能運算將 滅菌釜作業 納入考量
+                    prod_data = line_data[line_data['作業類型'].isin(['產品生產', '滅菌釜---產品殺菌'])]
                     
                     if not prod_data.empty and prod_data['實際花費時間(H)'].sum() > 0:
                         first_start = prod_data['Start'].min()
@@ -485,7 +486,8 @@ with tab_dashboard:
                 for f in finals:
                     FINAL_TO_RAW_MAP[f] = raw
                     
-            prod_records = df_display[df_display['作業類型'].isin(['產品生產', '產品殺菌作業'])]
+            # 🌟 確保滅菌釜作業被納入物料追蹤名單
+            prod_records = df_display[df_display['作業類型'].isin(['產品生產', '產品殺菌作業', '滅菌釜---產品殺菌'])]
             
             unique_raw_groups = set()
             for p in prod_records['產品名稱'].unique():
@@ -505,7 +507,7 @@ with tab_dashboard:
                         display_title = group_name
                     
                     line_data = df_display[(df_display['設備類別'] == '生產線') & 
-                                           (df_display['作業類型'] == '產品生產') & 
+                                           (df_display['作業類型'].isin(['產品生產', '滅菌釜---產品殺菌'])) & 
                                            (df_display['產品名稱'].isin(target_prod_names))].copy()
                     
                     line_data['調配(生產)噸數(T)'] = pd.to_numeric(line_data['調配(生產)噸數(T)'], errors='coerce').fillna(0)
