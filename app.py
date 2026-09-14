@@ -105,7 +105,7 @@ with tab_input:
         selected_equip = st.selectbox("殺菌機選擇", STERILIZERS)
         task_type = st.radio(
             "作業類型", 
-            ["產品殺菌作業", "設備殺菌", "設備CIP清洗", "機台維修",  "待料停機", "中午用餐"]
+            ["產品殺菌作業", "設備蒸汽殺菌", "設備CIP清洗", "機台維修", "待料停機", "中午用餐"]
         )
         
         if task_type == "產品殺菌作業":
@@ -129,12 +129,10 @@ with tab_input:
 
     elif equip_type == "生產線":
         selected_equip = st.selectbox("生產線選擇", LINES)
-        # 🌟 增加 滅菌釜---產品殺菌 選項
         task_type = st.radio(
             "作業類型", 
-            ["產品生產", "設備殺菌", "設備CIP清洗", "機台維修", "換線作業停機 1837-946", "待料停機", "中午用餐", "滅菌釜---產品殺菌"]
+            ["產品生產", "設備蒸汽殺菌", "設備CIP清洗", "機台維修", "換線作業停機 1837-946", "待料停機", "中午用餐", "滅菌釜---產品殺菌"]
         )
-        # 🌟 將滅菌釜作業也視同產品生產，要求輸入產出量
         is_production = (task_type in ["產品生產", "滅菌釜---產品殺菌"])
 
         if is_production:
@@ -170,7 +168,6 @@ with tab_input:
     st.markdown("---")
     remarks = st.text_area("備註 (異常原因說明)", placeholder="若有異常、維修或特殊狀況，請簡述說明...")
 
-    # --- 資料寫入與系統自動計算邏輯 ---
     if st.button("確認送出紀錄", type="primary"):
         if end_time <= start_time:
             st.error("錯誤：結束時間不得早於或等於開始時間！")
@@ -269,12 +266,10 @@ with tab_dashboard:
             df_chart['Start'] = pd.to_datetime(df_chart['日期'].astype(str) + ' ' + df_chart['開始時間'].astype(str))
             df_chart['Finish'] = pd.to_datetime(df_chart['日期'].astype(str) + ' ' + df_chart['結束時間'].astype(str))
             
-            # 🌟 圖表標籤：滅菌釜作業也會顯示產品名稱
             df_chart['顯示標籤'] = df_chart.apply(
                 lambda x: x['產品名稱'] if x['作業類型'] in ['產品生產', '產品殺菌作業', '滅菌釜---產品殺菌'] else x['作業類型'], axis=1
             )
             
-            # 🌟 狀態分組：統一編入「正常生產 / 殺菌」
             df_chart['狀態分組'] = df_chart['作業類型'].apply(
                 lambda x: '正常生產 / 殺菌' if x in ['產品生產', '產品殺菌作業', '滅菌釜---產品殺菌'] else x
             )
@@ -310,7 +305,7 @@ with tab_dashboard:
             
             def split_overlapping_blocks(df):
                 if df.empty: return df
-                interrupt_types = ['機台維修', '換線作業停機 1837-946', '待料停機', '中午用餐', '設備殺菌', '設備CIP清洗']
+                interrupt_types = ['機台維修', '換線作業停機 1837-946', '待料停機', '中午用餐', '設備蒸汽殺菌', '設備CIP清洗']
                 base_blocks = df[~df['作業類型'].isin(interrupt_types)].to_dict('records')
                 interrupt_blocks = df[df['作業類型'].isin(interrupt_types)].to_dict('records')
                 new_records = []
@@ -347,7 +342,7 @@ with tab_dashboard:
 
             status_colors = {
                 '正常生產 / 殺菌': '#F8E71C', 
-                '設備殺菌': '#F5A623',   
+                '設備蒸汽殺菌': '#F5A623',   
                 '設備CIP清洗': '#7ED321',   
                 '機台維修': '#D0021B',     
                 '換線作業停機 1837-946': '#BD10E0', 
@@ -396,7 +391,13 @@ with tab_dashboard:
                 fixedrange=True    
             )
             
-            fig.update_traces(textposition='inside', insidetextanchor='middle')
+            # 🌟 破解隱形區塊的魔法：為所有色塊加上「黑色邊框」
+            fig.update_traces(
+                textposition='inside', 
+                insidetextanchor='middle',
+                marker_line_color='black', # 加上明顯的黑色邊框
+                marker_line_width=1.5      # 邊框粗細
+            )
             
             fig.update_layout(
                 showlegend=True,
@@ -431,7 +432,6 @@ with tab_dashboard:
             for idx, line in enumerate(LINES):
                 with cols[idx]:
                     line_data = df_display[df_display['設備名稱'] == line]
-                    # 🌟 效能運算將 滅菌釜作業 納入考量
                     prod_data = line_data[line_data['作業類型'].isin(['產品生產', '滅菌釜---產品殺菌'])]
                     
                     if not prod_data.empty and prod_data['實際花費時間(H)'].sum() > 0:
@@ -486,7 +486,6 @@ with tab_dashboard:
                 for f in finals:
                     FINAL_TO_RAW_MAP[f] = raw
                     
-            # 🌟 確保滅菌釜作業被納入物料追蹤名單
             prod_records = df_display[df_display['作業類型'].isin(['產品生產', '產品殺菌作業', '滅菌釜---產品殺菌'])]
             
             unique_raw_groups = set()
